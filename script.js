@@ -348,17 +348,31 @@ window.closeMobileChat = () => { window.showView('patient-view'); window.clearCh
 window.openAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.remove('hidden'); document.getElementById('ai-training-modal')?.classList.add('flex'); };
 window.closeAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.add('hidden'); };
 
+window.currentRecognition = null; // Variable global para controlar el hardware
+
 window.startVoiceRecognition = (source) => {
+    const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
+    const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
+
+    // Funcionalidad Toggle: Si ya está escuchando y el usuario lo toca, lo apagamos
+    if (window.currentRecognition) {
+        window.currentRecognition.abort();
+        window.currentRecognition = null;
+        input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
+        btn.classList.remove('text-red-500', 'animate-pulse');
+        btn.classList.add('text-slate-400');
+        return;
+    }
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) { window.notify("Tu navegador no soporta reconocimiento de voz.", "error"); return; }
     
     const recognition = new SpeechRecognition();
+    window.currentRecognition = recognition; // Guardamos la sesión activa
+    
     recognition.lang = 'es-ES';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
-    
-    const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
-    const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
     
     recognition.onstart = () => {
         input.placeholder = "Escuchando...";
@@ -369,20 +383,22 @@ window.startVoiceRecognition = (source) => {
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         input.value = transcript;
-        window.sendMessageToAI(source); // Auto-enviar al terminar de hablar
+        window.sendMessageToAI(source);
     };
     
-    recognition.onerror = (event) => { window.notify("Error en el micrófono: " + event.error, "error"); };
+    recognition.onerror = (event) => { 
+        if(event.error !== 'aborted') window.notify("Error en el micrófono: " + event.error, "error"); 
+    };
     
     recognition.onend = () => {
         input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
         btn.classList.remove('text-red-500', 'animate-pulse');
         btn.classList.add('text-slate-400');
+        window.currentRecognition = null; // Liberamos el hardware al terminar
     };
     
     recognition.start();
 };
-
 window.updateSpecMode = (val) => { specModeSelection = val; window.refreshUIWithData(); window.showView('patient-view'); };
 
 window.showInstallInstructions = () => {
@@ -569,6 +585,11 @@ window.sendMessageToAI = async (source) => {
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     const userMsg = input?.value.trim();
     
+    // Matar el micrófono inmediatamente si el usuario envía algo
+    if (window.currentRecognition) {
+        window.currentRecognition.abort();
+        window.currentRecognition = null;
+    }
     // Permitir enviar solo imagen si no hay texto, o texto solo, o ambos
     if (!userMsg && !currentImageBase64) return;
     
