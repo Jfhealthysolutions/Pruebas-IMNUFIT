@@ -347,6 +347,42 @@ window.openAIChat = () => { if (window.innerWidth < 768) { window.showView('mobi
 window.closeMobileChat = () => { window.showView('patient-view'); window.clearChat(); };
 window.openAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.remove('hidden'); document.getElementById('ai-training-modal')?.classList.add('flex'); };
 window.closeAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.add('hidden'); };
+
+window.startVoiceRecognition = (source) => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { window.notify("Tu navegador no soporta reconocimiento de voz.", "error"); return; }
+    
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'es-ES';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+    
+    const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
+    const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
+    
+    recognition.onstart = () => {
+        input.placeholder = "Escuchando...";
+        btn.classList.add('text-red-500', 'animate-pulse');
+        btn.classList.remove('text-slate-400');
+    };
+    
+    recognition.onresult = (event) => {
+        const transcript = event.results[0][0].transcript;
+        input.value = transcript;
+        window.sendMessageToAI(source); // Auto-enviar al terminar de hablar
+    };
+    
+    recognition.onerror = (event) => { window.notify("Error en el micrófono: " + event.error, "error"); };
+    
+    recognition.onend = () => {
+        input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
+        btn.classList.remove('text-red-500', 'animate-pulse');
+        btn.classList.add('text-slate-400');
+    };
+    
+    recognition.start();
+};
+
 window.updateSpecMode = (val) => { specModeSelection = val; window.refreshUIWithData(); window.showView('patient-view'); };
 
 window.showInstallInstructions = () => {
