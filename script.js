@@ -676,25 +676,38 @@ window.sendMessageToAI = async (source) => {
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
 
-        // --- SISTEMA DE VOZ BIDIRECCIONAL ---
+        // --- SISTEMA DE VOZ BIDIRECCIONAL (GOOGLE CLOUD PREMIUM TTS) ---
         if (window.lastInteractionWasVoice) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); 
-                
-                // Limpiar texto para lectura natural (quita Markdown, URLs y comandos)
-                const textToSpeak = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
-                
-                const utterance = new SpeechSynthesisUtterance(textToSpeak);
-                utterance.lang = 'es-ES'; 
-                utterance.rate = 1.05; 
-                
-                // Buscar la voz más natural disponible en el dispositivo
-                const voices = window.speechSynthesis.getVoices();
-                const bestVoice = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('es'));
-                if (bestVoice) utterance.voice = bestVoice;
+            // Limpiar texto para lectura fluida
+            const textToSpeak = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
+            
+            // Usamos tu API Key actual. Asegúrate de habilitar Cloud Text-to-Speech API en tu proyecto de Google Cloud.
+            const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
 
-                window.speechSynthesis.speak(utterance);
+            try {
+                const ttsRes = await fetch(ttsUrl, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        input: { text: textToSpeak },
+                        // 'es-US-Journey-F' es la voz más humana y premium de Google en español
+                        voice: { languageCode: 'es-US', name: 'es-US-Journey-F' }, 
+                        audioConfig: { audioEncoding: 'MP3' }
+                    })
+                });
+                
+                const ttsData = await ttsRes.json();
+                
+                if (ttsData.audioContent) {
+                    const audio = new Audio("data:audio/mp3;base64," + ttsData.audioContent);
+                    audio.play();
+                } else {
+                    console.error("Error en TTS API (¿Activaste la API en Google Cloud?):", ttsData);
+                }
+            } catch (err) {
+                console.error("Fallo al conectar con Google TTS:", err);
             }
+            
             window.lastInteractionWasVoice = false; 
         }
 
