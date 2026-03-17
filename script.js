@@ -375,6 +375,7 @@ window.startVoiceRecognition = (source) => {
     recognition.maxAlternatives = 1;
     
     recognition.onstart = () => {
+        if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // Silenciar si la IA estaba hablando
         input.placeholder = "Escuchando...";
         btn.classList.add('text-red-500', 'animate-pulse');
         btn.classList.remove('text-slate-400');
@@ -383,6 +384,7 @@ window.startVoiceRecognition = (source) => {
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         input.value = transcript;
+        window.lastInteractionWasVoice = true; // Activar flag de voz
         window.sendMessageToAI(source);
     };
     
@@ -673,6 +675,29 @@ window.sendMessageToAI = async (source) => {
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
+
+        // --- SISTEMA DE VOZ BIDIRECCIONAL ---
+        if (window.lastInteractionWasVoice) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel(); 
+                
+                // Limpiar texto para lectura natural (quita Markdown, URLs y comandos)
+                const textToSpeak = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
+                
+                const utterance = new SpeechSynthesisUtterance(textToSpeak);
+                utterance.lang = 'es-ES'; 
+                utterance.rate = 1.05; 
+                
+                // Buscar la voz más natural disponible en el dispositivo
+                const voices = window.speechSynthesis.getVoices();
+                const bestVoice = voices.find(v => v.lang.startsWith('es') && v.name.includes('Google')) || voices.find(v => v.lang.startsWith('es'));
+                if (bestVoice) utterance.voice = bestVoice;
+
+                window.speechSynthesis.speak(utterance);
+            }
+            window.lastInteractionWasVoice = false; 
+        }
+
     } catch (e) { 
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
         window.appendChatMessageToAll('ai', `⚠️ Hubo un error al procesar. Intenta con una imagen más pequeña o texto.`); 
