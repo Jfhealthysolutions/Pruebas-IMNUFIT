@@ -191,7 +191,7 @@ body.paused-animations * {
     border-radius: 10px; 
 }
 
-/* --- FIX CABECERA CON ESPACIO/MARGEN --- */
+/* --- FIX CABECERA CON ESPACIO/MARGEN -- */
 header {
     /* Altura automática para crecer con el relleno */
     height: auto !important; 
