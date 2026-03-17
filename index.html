@@ -82,7 +82,7 @@
 
                 <button type="button" id="btn-mic-mobile" onclick="window.startVoiceRecognition('mobile')" class="p-3 text-slate-400 hover:text-[#2E4982] cursor-pointer transition-colors shrink-0"><svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg></button>
 
-                <input id="ai-input-mobile" type="text" placeholder="Escribe o envía una foto..." class="flex-1 bg-transparent border-none outline-none py-3 text-slate-700 text-[15px] max-h-32 overflow-y-auto resize-none">
+                <input id="ai-input-mobile" type="text" placeholder="Escribe o envía una foto..." class="flex-1 min-w-0 w-full bg-transparent border-none outline-none py-3 text-slate-700 text-[15px]">
                 
                 <button type="submit" class="w-12 h-12 bg-[#2E4982] text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-95 transition-transform shrink-0"><svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
             </form>
@@ -109,7 +109,7 @@
 
                     <button type="button" id="btn-mic-desktop" onclick="window.startVoiceRecognition('desktop')" class="p-3 text-slate-400 hover:text-[#2E4982] cursor-pointer transition-colors shrink-0"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg></button>
 
-                    <input id="ai-input-desktop" type="text" placeholder="Pregunta..." class="flex-1 bg-transparent outline-none px-2 py-3 text-slate-700 text-[15px]">
+                    <input id="ai-input-desktop" type="text" placeholder="Pregunta..." class="flex-1 min-w-0 w-full bg-transparent outline-none px-2 py-3 text-slate-700 text-[15px]">
 
                     <button type="submit" class="w-12 h-12 bg-[#2E4982] hover:bg-[#1e315a] text-white rounded-2xl flex items-center justify-center shadow-lg active:scale-95 text-center shrink-0"><svg class="w-5 h-5 ml-0.5" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"></path></svg></button>
                 </form>
