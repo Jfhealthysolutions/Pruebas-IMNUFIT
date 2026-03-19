@@ -408,13 +408,12 @@ window.loadChatMemory = async () => {
 };
 
 window.handleAIAction = (viewId) => { window.closeDesktopAIModal(); if (viewId === 'program-detail-view') window.viewProgramResources(); else window.showView(viewId); };
-window.openDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(m){ m.classList.remove('hidden'); m.classList.add('flex'); setTimeout(() => { m.classList.remove('opacity-0'); m.querySelector('div')?.classList.remove('scale-95', 'opacity-0'); document.getElementById('ai-input-desktop')?.focus(); }, 10); }};
-window.closeDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(!m) return; m.classList.add('opacity-0'); m.querySelector('div')?.classList.add('scale-95', 'opacity-0'); setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); window.clearChat(); }, 300); };
-window.openAIChat = () => { if (window.innerWidth < 768) { window.showView('mobile-ai-view'); setTimeout(() => document.getElementById('ai-input-mobile')?.focus(), 300); } else window.openDesktopAIModal(); };
-window.closeMobileChat = () => { window.showView('patient-view'); window.clearChat(); };
+window.openDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(m){ m.classList.remove('hidden'); m.classList.add('flex'); setTimeout(() => { m.classList.remove('opacity-0'); m.querySelector('div')?.classList.remove('scale-95', 'opacity-0'); document.getElementById('ai-input-desktop')?.focus(); window.scrollToBottom(); }, 10); }};
+window.closeDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(!m) return; m.classList.add('opacity-0'); m.querySelector('div')?.classList.add('scale-95', 'opacity-0'); setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); }, 300); };
+window.openAIChat = () => { if (window.innerWidth < 768) { window.showView('mobile-ai-view'); setTimeout(() => { document.getElementById('ai-input-mobile')?.focus(); window.scrollToBottom(); }, 300); } else window.openDesktopAIModal(); };
+window.closeMobileChat = () => { window.showView('patient-view'); };
 window.openAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.remove('hidden'); document.getElementById('ai-training-modal')?.classList.add('flex'); };
 window.closeAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.add('hidden'); };
-
 window.syncAIInstructions = async () => {
     if (!auth.currentUser) return;
     const aiDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'ai_config', 'instructions');
