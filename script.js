@@ -426,41 +426,35 @@ async function fetchWithRetry(url, options, retries = 3) {
 window.currentRecognition = null;
 window.isConversationMode = false;
 window.currentAudio = null;
-window.silenceCounter = 0; 
+window.micWatchdog = null; // NUEVO: El temporizador implacable para celulares
 
-// Sonido al encender (Ascendente)
 const playEarcon = () => {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+        osc.connect(gain); gain.connect(ctx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(600, ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.1);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.1);
     } catch(e){}
 };
 
-// NUEVO: Sonido de apagado (Descendente)
 const playStopEarcon = () => {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
-        osc.connect(gain);
-        gain.connect(ctx.destination);
+        osc.connect(gain); gain.connect(ctx.destination);
         osc.type = 'sine';
         osc.frequency.setValueAtTime(400, ctx.currentTime);
         osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.15);
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
-        osc.start(ctx.currentTime);
-        osc.stop(ctx.currentTime + 0.15);
+        osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
     } catch(e){}
 };
 
@@ -493,21 +487,24 @@ window.updateMicUI = (source, state) => {
 };
 
 window.startVoiceRecognition = (source, isAutoRestart = false) => {
+    // Apagado manual o reseteo
     if (!isAutoRestart && window.isConversationMode) {
         window.isConversationMode = false;
-        window.silenceCounter = 0; 
+        if (window.micWatchdog) clearTimeout(window.micWatchdog);
         if (window.currentRecognition) window.currentRecognition.abort();
         if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
         window.updateMicUI(source, 'idle');
-        playStopEarcon(); // Sonido al apagar manual
+        playStopEarcon(); 
         return;
     }
 
-    if (!isAutoRestart) window.silenceCounter = 0; 
     window.isConversationMode = true;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { window.notify("Tu navegador no soporta voz.", "error"); return; }
+    if (!SpeechRecognition) { 
+        window.notify("Tu navegador móvil no soporta voz o requiere permisos.", "error"); 
+        return; 
+    }
     
     const recognition = new SpeechRecognition();
     window.currentRecognition = recognition;
@@ -519,10 +516,21 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     recognition.onstart = () => {
         window.updateMicUI(source, 'listening');
         playEarcon(); 
+        
+        // EL PERRO GUARDIÁN: Apagado forzado e implacable a los 10 segundos
+        if (window.micWatchdog) clearTimeout(window.micWatchdog);
+        window.micWatchdog = setTimeout(() => {
+            if (window.isConversationMode && !window.lastInteractionWasVoice) {
+                window.isConversationMode = false;
+                if (window.currentRecognition) window.currentRecognition.abort();
+                window.updateMicUI(source, 'idle');
+                playStopEarcon();
+            }
+        }, 10000); 
     };
     
     recognition.onresult = (event) => {
-        window.silenceCounter = 0; 
+        if (window.micWatchdog) clearTimeout(window.micWatchdog); // Si habló, salvado del watchdog
         const transcript = event.results[0][0].transcript;
         const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
         if(input) input.value = transcript;
@@ -534,25 +542,22 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     };
     
     recognition.onerror = (event) => {
-        if(event.error === 'not-allowed') { 
+        if (window.micWatchdog) clearTimeout(window.micWatchdog);
+        // Fallos comunes en móviles: no-speech (silencio) o not-allowed (permisos)
+        if(event.error === 'not-allowed' || event.error === 'no-speech') { 
             window.isConversationMode = false; 
-            window.updateMicUI(source, 'idle'); 
-        }
-        if(event.error === 'no-speech') {
-            window.silenceCounter++; 
+            window.updateMicUI(source, 'idle');
+            if (event.error === 'no-speech') playStopEarcon();
         }
     };
     
     recognition.onend = () => {
+        // Si el navegador corta la conexión nativa por su cuenta
         if (window.isConversationMode && !window.lastInteractionWasVoice) {
-            if (window.silenceCounter >= 1) { // 1 Silencio nativo = ~8 a 10 seg
-                window.isConversationMode = false;
-                window.silenceCounter = 0;
-                window.updateMicUI(source, 'idle');
-                playStopEarcon(); // Sonido por inactividad
-            } else {
-                setTimeout(() => { if (window.isConversationMode) window.startVoiceRecognition(source, true); }, 300);
-            }
+            window.isConversationMode = false;
+            if (window.micWatchdog) clearTimeout(window.micWatchdog);
+            window.updateMicUI(source, 'idle');
+            playStopEarcon();
         } else if (!window.isConversationMode) {
             window.updateMicUI(source, 'idle');
         }
