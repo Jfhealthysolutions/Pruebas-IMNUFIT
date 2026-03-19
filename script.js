@@ -405,9 +405,9 @@ async function fetchWithRetry(url, options, retries = 3) {
 window.currentRecognition = null;
 window.isConversationMode = false;
 window.currentAudio = null;
-window.silenceCounter = 0; // NUEVO: Contador de inactividad del micrófono
+window.silenceCounter = 0; 
 
-// NUEVO: Feedback Auditivo (Tono elegante al encender el micrófono)
+// Sonido al encender (Ascendente)
 const playEarcon = () => {
     try {
         const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -425,13 +425,29 @@ const playEarcon = () => {
     } catch(e){}
 };
 
-// --- NUEVO: Controlador Visual Dinámico del Micrófono ---
+// NUEVO: Sonido de apagado (Descendente)
+const playStopEarcon = () => {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.15);
+    } catch(e){}
+};
+
 window.updateMicUI = (source, state) => {
     const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     if (!btn || !input) return;
 
-    // Íconos SVG
     const svgMic = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>`;
     const svgStopRed = `<span class="relative flex h-5 w-5 justify-center items-center"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-80"></span><svg class="relative w-3.5 h-3.5 text-red-600" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"></path></svg></span>`;
     const svgStopBlue = `<span class="relative flex h-5 w-5 justify-center items-center"><span class="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-80"></span><svg class="relative w-3.5 h-3.5 text-[#2E4982]" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"></path></svg></span>`;
@@ -456,17 +472,17 @@ window.updateMicUI = (source, state) => {
 };
 
 window.startVoiceRecognition = (source, isAutoRestart = false) => {
-    // Si el paciente presiona el botón STOP para cancelar
     if (!isAutoRestart && window.isConversationMode) {
         window.isConversationMode = false;
-        window.silenceCounter = 0; // Reiniciar contador al apagar manual
+        window.silenceCounter = 0; 
         if (window.currentRecognition) window.currentRecognition.abort();
         if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
         window.updateMicUI(source, 'idle');
+        playStopEarcon(); // Sonido al apagar manual
         return;
     }
 
-    if (!isAutoRestart) window.silenceCounter = 0; // Si lo toca el usuario, iniciar contador en 0
+    if (!isAutoRestart) window.silenceCounter = 0; 
     window.isConversationMode = true;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -481,11 +497,11 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     
     recognition.onstart = () => {
         window.updateMicUI(source, 'listening');
-        playEarcon(); // Sonido de aviso para hablar
+        playEarcon(); 
     };
     
     recognition.onresult = (event) => {
-        window.silenceCounter = 0; // Si habló algo, reiniciar el contador a 0
+        window.silenceCounter = 0; 
         const transcript = event.results[0][0].transcript;
         const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
         if(input) input.value = transcript;
@@ -502,19 +518,17 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
             window.updateMicUI(source, 'idle'); 
         }
         if(event.error === 'no-speech') {
-            window.silenceCounter++; // Sumar 1 al contador si hubo silencio
+            window.silenceCounter++; 
         }
     };
     
     recognition.onend = () => {
-        // Auto-apagado inteligente después de 3 silencios
         if (window.isConversationMode && !window.lastInteractionWasVoice) {
-            if (window.silenceCounter >= 3) {
+            if (window.silenceCounter >= 1) { // 1 Silencio nativo = ~8 a 10 seg
                 window.isConversationMode = false;
                 window.silenceCounter = 0;
                 window.updateMicUI(source, 'idle');
-                // Opcional: Descomenta la siguiente línea si quieres que les avise visualmente que se apagó por inactividad
-                // window.notify("Modo conversación en pausa por inactividad");
+                playStopEarcon(); // Sonido por inactividad
             } else {
                 setTimeout(() => { if (window.isConversationMode) window.startVoiceRecognition(source, true); }, 300);
             }
@@ -530,8 +544,8 @@ window.sendMessageToAI = async (source) => {
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     const userMsg = input?.value.trim();
     
-    // Cancelación manual al enviar texto escrito
     if (!window.lastInteractionWasVoice) {
+        if (window.isConversationMode) playStopEarcon(); // Sonido si escribe manual y mata el bucle
         window.isConversationMode = false;
         window.silenceCounter = 0;
         if (window.currentRecognition) { window.currentRecognition.abort(); window.currentRecognition = null; }
@@ -612,11 +626,9 @@ window.sendMessageToAI = async (source) => {
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
 
-        // --- SISTEMA DE VOZ BIDIRECCIONAL (Fragmentación / Latencia Cero) ---
         if (window.lastInteractionWasVoice) {
             window.updateMicUI(source, 'speaking');
             
-            // Limpiar y dividir texto en oraciones cortas
             const cleanText = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
             const sentences = cleanText.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 0);
             
@@ -626,7 +638,6 @@ window.sendMessageToAI = async (source) => {
             let currentIndex = 0;
             let audioQueue = [];
 
-            // Petición individual por fragmento
             const fetchAudio = async (text) => {
                 try {
                     const res = await fetch(ttsUrl, {
@@ -643,23 +654,19 @@ window.sendMessageToAI = async (source) => {
                 } catch (e) { return null; }
             };
 
-            // Motor de reproducción en cadena
             const playNext = async () => {
-                if (!window.isConversationMode && !window.lastInteractionWasVoice) return; // Si el usuario canceló
+                if (!window.isConversationMode && !window.lastInteractionWasVoice) return; 
 
                 if (currentIndex >= sentences.length) {
-                    // Terminó de hablar todo el mensaje
                     window.lastInteractionWasVoice = false;
                     if (window.isConversationMode) window.startVoiceRecognition(source, true);
                     else window.updateMicUI(source, 'idle');
                     return;
                 }
 
-                // Reproducir el audio actual
                 let audio = audioQueue[currentIndex];
                 if (!audio) audio = await fetchAudio(sentences[currentIndex]);
 
-                // PRECARGAR el siguiente en segundo plano (Magia de latencia cero)
                 if (currentIndex + 1 < sentences.length) {
                     fetchAudio(sentences[currentIndex + 1]).then(a => audioQueue[currentIndex + 1] = a);
                 }
