@@ -684,8 +684,16 @@ window.sendMessageToAI = async (source) => {
         if (window.lastInteractionWasVoice) {
             window.updateMicUI(source, 'speaking');
             
-            // Filtro Fonético: Engañamos al motor de voz para que lea la marca como palabra y no como siglas
-            const cleanText = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '').replace(/IMNUFIT/g, 'Imnufít');
+            // ASPIRADORA FONÉTICA: Limpiamos todo el código y formato visual antes de que la IA hable
+            const cleanText = aiText
+                .replace(/IMNUFIT/g, 'Imnúfit') // Pronunciación perfecta de tu marca
+                .replace(/\[(PRO|VEG|FAT|EXT|SPICE)(?:-HDR)?\]/g, '') // Elimina nuestras etiquetas secretas de íconos
+                .replace(/-{2,}/g, '') // Elimina líneas de guiones repetidos (----)
+                .replace(/(^|\n)\s*-\s/g, '$1 ') // Elimina los guiones sueltos que actúan como viñetas de lista
+                .replace(/[*_#]/g, '') // Elimina negritas, cursivas y títulos Markdown
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convierte botones en solo texto hablado
+                .replace(/(?:https?|ftp):\/\/[\n\S]+/g, ''); // Elimina cualquier URL invisible
+                
             const sentences = cleanText.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 0);
             
             const ttsKey = "AIzaSyDGprBQ8u5UZAL_B1kostoNCpBOonyX1OA"; 
