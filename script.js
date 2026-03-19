@@ -405,6 +405,25 @@ async function fetchWithRetry(url, options, retries = 3) {
 window.currentRecognition = null;
 window.isConversationMode = false;
 window.currentAudio = null;
+window.silenceCounter = 0; // NUEVO: Contador de inactividad del micrófono
+
+// NUEVO: Feedback Auditivo (Tono elegante al encender el micrófono)
+const playEarcon = () => {
+    try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.1);
+        gain.gain.setValueAtTime(0.1, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
+        osc.start(ctx.currentTime);
+        osc.stop(ctx.currentTime + 0.1);
+    } catch(e){}
+};
 
 // --- NUEVO: Controlador Visual Dinámico del Micrófono ---
 window.updateMicUI = (source, state) => {
@@ -440,12 +459,14 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     // Si el paciente presiona el botón STOP para cancelar
     if (!isAutoRestart && window.isConversationMode) {
         window.isConversationMode = false;
+        window.silenceCounter = 0; // Reiniciar contador al apagar manual
         if (window.currentRecognition) window.currentRecognition.abort();
         if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
         window.updateMicUI(source, 'idle');
         return;
     }
 
+    if (!isAutoRestart) window.silenceCounter = 0; // Si lo toca el usuario, iniciar contador en 0
     window.isConversationMode = true;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -460,9 +481,11 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     
     recognition.onstart = () => {
         window.updateMicUI(source, 'listening');
+        playEarcon(); // Sonido de aviso para hablar
     };
     
     recognition.onresult = (event) => {
+        window.silenceCounter = 0; // Si habló algo, reiniciar el contador a 0
         const transcript = event.results[0][0].transcript;
         const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
         if(input) input.value = transcript;
@@ -478,11 +501,23 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
             window.isConversationMode = false; 
             window.updateMicUI(source, 'idle'); 
         }
+        if(event.error === 'no-speech') {
+            window.silenceCounter++; // Sumar 1 al contador si hubo silencio
+        }
     };
     
     recognition.onend = () => {
+        // Auto-apagado inteligente después de 3 silencios
         if (window.isConversationMode && !window.lastInteractionWasVoice) {
-            setTimeout(() => { if (window.isConversationMode) window.startVoiceRecognition(source, true); }, 300);
+            if (window.silenceCounter >= 3) {
+                window.isConversationMode = false;
+                window.silenceCounter = 0;
+                window.updateMicUI(source, 'idle');
+                // Opcional: Descomenta la siguiente línea si quieres que les avise visualmente que se apagó por inactividad
+                // window.notify("Modo conversación en pausa por inactividad");
+            } else {
+                setTimeout(() => { if (window.isConversationMode) window.startVoiceRecognition(source, true); }, 300);
+            }
         } else if (!window.isConversationMode) {
             window.updateMicUI(source, 'idle');
         }
@@ -498,6 +533,7 @@ window.sendMessageToAI = async (source) => {
     // Cancelación manual al enviar texto escrito
     if (!window.lastInteractionWasVoice) {
         window.isConversationMode = false;
+        window.silenceCounter = 0;
         if (window.currentRecognition) { window.currentRecognition.abort(); window.currentRecognition = null; }
         if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
         window.updateMicUI(source, 'idle');
