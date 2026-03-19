@@ -1,4 +1,3 @@
-
 import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut, setPersistence, browserLocalPersistence, updatePassword, sendPasswordResetEmail, signInWithCustomToken, signInAnonymously } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
@@ -587,26 +586,23 @@ window.sendMessageToAI = async (source) => {
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     const userMsg = input?.value.trim();
     
-    // Matar el micrófono inmediatamente si el usuario envía algo
+    // Matar el micrófono inmediatamente si el usuario envía algo manual
     if (window.currentRecognition) {
         window.currentRecognition.abort();
         window.currentRecognition = null;
     }
-    // Permitir enviar solo imagen si no hay texto, o texto solo, o ambos
+
     if (!userMsg && !currentImageBase64) return;
     
     const msgToSend = userMsg || (currentImageBase64 ? "Analiza esta imagen." : "");
-    
     input.value = ''; if(source === 'mobile') input.blur();
 
-    // Mostrar mensaje en el chat con la imagen si existe
     let displayImg = currentImageBase64 ? `data:${currentImageMime};base64,${currentImageBase64}` : null;
     window.appendChatMessageToAll('user', msgToSend, displayImg);
     
-    // Guardar imagen temporalmente para enviarla y luego limpiar
     const imageToSend = currentImageBase64;
     const mimeToSend = currentImageMime;
-    window.removeImage(); // Limpiar UI inmediatamente
+    window.removeImage();
 
     const loaderHtml = `<div class="ai-loading-indicator flex justify-start mb-4"><div class="bg-slate-100 text-slate-400 px-4 py-2 rounded-2xl text-[11px] animate-pulse italic">Analizando...</div></div>`;
     const m = document.getElementById('ai-messages-mobile');
@@ -616,8 +612,6 @@ window.sendMessageToAI = async (source) => {
 
     const info = currentAppData || {};
     const patientData = JSON.stringify(info, null, 2);
-    
-    // --- CONTEXTO TEMPORAL ---
     const now = new Date();
     const fechaHora = now.toLocaleString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
@@ -625,40 +619,35 @@ window.sendMessageToAI = async (source) => {
     
     --- CONTEXTO ACTUAL ---
     Fecha y Hora del Paciente: ${fechaHora}
-    (Usa esto para responder preguntas como "qué como ahora" o "qué ejercicio toca hoy").
 
     --- DATOS DEL PACIENTE (AIRTABLE) ---
-    Usa estos datos como tu única fuente de verdad para preguntas personales.
     ${patientData}
     -------------------------------------
 
     INSTRUCCIONES CLAVE DEL ADMINISTRADOR: ${aiCustomInstructions}
     
     DIRECTRICES ESTRICTAS:
-    1. **Estilo**: Responde de forma clara, precisa, amable y fluida. NO uses caracteres extraños. Respeta el formato de **negritas** y signos de puntuación.
-    2. **Formato Enlaces**: Cuando des un enlace, MUESTRA UN BOTÓN usando el formato Markdown: [Texto del Botón](URL o funcion).
-    3. **Alcance**: NUNCA respondas preguntas que no tengan nada que ver con IMNUFIT o la salud del paciente.
-    4. **Prioridad Datos**: Para preguntas sobre dieta o plan, usa SOLO la información de Airtable (arriba).
-    5. **Prohibido**: NO sugerir la "Guía PDF" como respuesta al plan diario.
-    6. **Análisis de Imágenes**: Si el usuario envía una foto de comida o producto, analízala estrictamente basándote en su plan nutricional actual. Indica si es adecuado o no y por qué. Se breve y directo.
+    1. Estilo: Responde de forma clara, precisa, amable y fluida. NO uses caracteres extraños. Respeta el formato de **negritas** y signos de puntuación.
+    2. Formato Enlaces: Cuando des un enlace, MUESTRA UN BOTÓN usando el formato Markdown: [Texto del Botón](URL o funcion).
+    3. Alcance: NUNCA respondas preguntas que no tengan nada que ver con IMNUFIT o la salud del paciente.
+    4. Prioridad Datos: Para preguntas sobre dieta o plan, usa SOLO la información de Airtable (arriba).
+    5. Prohibido: NO sugerir la "Guía PDF" como respuesta al plan diario.
+    6. Análisis de Imágenes: Si el usuario envía una foto de comida o producto, analízala estrictamente basándote en su plan nutricional actual. Indica si es adecuado o no y por qué. Se breve y directo.
 
     REGLAS DE ACCIÓN OBLIGATORIAS:
-    - **Check-in**: Muestra [Hacer Check-in](https://airtable.com/appCHcm7XPzeoyBCs/pagh79fwniuSPmusB/form).
-    - **Subir Documentos/Exámenes**: Muestra [Subir Archivos](https://airtable.com/appCHcm7XPzeoyBCs/pagYI9IBX65B8OsAY/form).
-    - **Entrenar**: Muestra [Ver Entrenamientos](https://imnufit.com/entrenaconfrenplus/).
-    - **Agendar Cita**: Muestra [Reservar Cita](${info["Link Calendar"] || CALENDAR_LINK_DEFAULT}) y añade: "Recuerda que es preferible completar tu Check-in 24 horas antes.".
-    - **Ver Recursos/Manual**: SOLO si piden manuales o material de apoyo, muestra [Ver Guías PDF](function:program-detail-view).
-    - **Ver Consultas**: Muestra [Historial de Consultas](${info["Link Consultas"] || "#"}).
-    - **Contactar**: Muestra [Contactar Soporte](function:contact-view).
-    - **Cancelar Membresía/Clave**: Muestra [Mi Cuenta](function:membership-view). (NO ofrecer pausar).
-    - **Precios/Web**: Muestra [Visitar Web](https://imnufit.com).
-    - **Comunidad**: [Unirme a la Comunidad](https://chat.whatsapp.com/FNoToJXy8HO7iLVhPseQHB).`;
+    - Check-in: Muestra [Hacer Check-in](https://airtable.com/appCHcm7XPzeoyBCs/pagh79fwniuSPmusB/form).
+    - Subir Documentos/Exámenes: Muestra [Subir Archivos](https://airtable.com/appCHcm7XPzeoyBCs/pagYI9IBX65B8OsAY/form).
+    - Entrenar: Muestra [Ver Entrenamientos](https://imnufit.com/entrenaconfrenplus/).
+    - Agendar Cita: Muestra [Reservar Cita](${info["Link Calendar"] || CALENDAR_LINK_DEFAULT}).
+    - Ver Recursos/Manual: Muestra [Ver Guías PDF](function:program-detail-view).
+    - Ver Consultas: Muestra [Historial de Consultas](${info["Link Consultas"] || "#"}).
+    - Contactar: Muestra [Contactar Soporte](function:contact-view).
+    - Cancelar Membresía/Clave: Muestra [Mi Cuenta](function:membership-view).
+    - Precios/Web: Muestra [Visitar Web](https://imnufit.com).
+    - Comunidad: [Unirme a la Comunidad](https://chat.whatsapp.com/FNoToJXy8HO7iLVhPseQHB).`;
 
     try {
-        // Construir historial previo
         const history = chatHistory.map(m => ({ role: m.role === 'user' ? 'user' : 'model', parts: [{ text: m.text }] }));
-        
-        // Construir parte del usuario actual
         let userParts = [{ text: msgToSend }];
         if (imageToSend) {
             userParts.push({ inlineData: { mimeType: mimeToSend, data: imageToSend } });
@@ -678,11 +667,10 @@ window.sendMessageToAI = async (source) => {
 
         // --- SISTEMA DE VOZ BIDIRECCIONAL (GOOGLE CLOUD PREMIUM TTS) ---
         if (window.lastInteractionWasVoice) {
-            // Limpiar texto para lectura fluida
             const textToSpeak = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
             
-            // Usamos tu API Key actual. Asegúrate de habilitar Cloud Text-to-Speech API en tu proyecto de Google Cloud.
-            const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`;
+            const ttsKey = "AIzaSyDGprBQ8u5UZAL_B1kostoNCpBOonyX1OA"; 
+            const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsKey}`;
 
             try {
                 const ttsRes = await fetch(ttsUrl, {
@@ -690,8 +678,7 @@ window.sendMessageToAI = async (source) => {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         input: { text: textToSpeak },
-                        // 'es-US-Journey-F' es la voz más humana y premium de Google en español
-                        voice: { languageCode: 'es-US', name: 'es-US-Journey-F' }, 
+                        voice: { languageCode: 'es-US', name: 'es-US-Journey-F' },
                         audioConfig: { audioEncoding: 'MP3' }
                     })
                 });
@@ -702,7 +689,7 @@ window.sendMessageToAI = async (source) => {
                     const audio = new Audio("data:audio/mp3;base64," + ttsData.audioContent);
                     audio.play();
                 } else {
-                    console.error("Error en TTS API (¿Activaste la API en Google Cloud?):", ttsData);
+                    console.error("Error en TTS API:", ttsData);
                 }
             } catch (err) {
                 console.error("Fallo al conectar con Google TTS:", err);
