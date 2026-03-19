@@ -360,6 +360,53 @@ window.clearChat = () => {
     if(m) m.innerHTML = html; if(d) d.innerHTML = html;
 };
 
+// --- FASE 2.1: MÓDULO DE MEMORIA CONTINUA ---
+window.saveChatMemory = async () => {
+    if (!auth.currentUser) return;
+    // Solo guardamos los últimos 15 mensajes para que la app vuele y no gastes tokens extra
+    const memoryToSave = chatHistory.slice(-15);
+    try {
+        await setDoc(doc(db, 'chats_memoria', auth.currentUser.email), {
+            messages: memoryToSave,
+            lastUpdate: new Date()
+        });
+    } catch (e) { console.error("Error guardando memoria oculta:", e); }
+};
+
+window.loadChatMemory = async () => {
+    if (!auth.currentUser) return;
+    try {
+        const docSnap = await getDoc(doc(db, 'chats_memoria', auth.currentUser.email));
+        if (docSnap.exists() && docSnap.data().messages && docSnap.data().messages.length > 0) {
+            chatHistory = docSnap.data().messages;
+            
+            const m = document.getElementById('ai-messages-mobile');
+            const d = document.getElementById('ai-messages-desktop');
+            const historyLabel = `<div class="flex justify-center mb-8 mt-4"><p class="text-[10px] text-slate-400 font-black uppercase tracking-widest bg-slate-100 px-4 py-1.5 rounded-full">Historial Recuperado</p></div>`;
+            if(m) m.innerHTML = historyLabel; 
+            if(d) d.innerHTML = historyLabel;
+
+            chatHistory.forEach(msg => {
+                const role = msg.role; 
+                const content = role === 'ai' ? window.parseAIResponse(msg.text) : msg.text.replace(/\n/g, '<br>');
+                const html = `
+                    <div class="flex ${role === 'user' ? 'justify-end' : 'justify-start'} mb-6 fade-in text-left">
+                        <div class="max-w-[85%] px-5 py-4 rounded-[1.4rem] text-[14px] leading-relaxed ${role === 'user' ? 'bg-[#2E4982] text-white rounded-tr-sm' : 'bg-white border border-slate-100 text-slate-600 rounded-tl-sm shadow-sm'}">
+                            ${content}
+                        </div>
+                    </div>`;
+                if(m) m.insertAdjacentHTML('beforeend', html);
+                if(d) d.insertAdjacentHTML('beforeend', html);
+            });
+            setTimeout(window.scrollToBottom, 100);
+        } else {
+            window.clearChat(); 
+        }
+    } catch (e) {
+        window.clearChat();
+    }
+};
+
 window.handleAIAction = (viewId) => { window.closeDesktopAIModal(); if (viewId === 'program-detail-view') window.viewProgramResources(); else window.showView(viewId); };
 window.openDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(m){ m.classList.remove('hidden'); m.classList.add('flex'); setTimeout(() => { m.classList.remove('opacity-0'); m.querySelector('div')?.classList.remove('scale-95', 'opacity-0'); document.getElementById('ai-input-desktop')?.focus(); }, 10); }};
 window.closeDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(!m) return; m.classList.add('opacity-0'); m.querySelector('div')?.classList.add('scale-95', 'opacity-0'); setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); window.clearChat(); }, 300); };
@@ -691,6 +738,9 @@ window.sendMessageToAI = async (source) => {
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
+        
+        // GUARDAMOS EN LA MEMORIA DE FIREBASE (FASE 2.1)
+        window.saveChatMemory();
 
         // SISTEMA DE VOZ SEGURO PARA CELULARES
         if (window.lastInteractionWasVoice) {
@@ -928,9 +978,9 @@ function updateDashboardUI(data) {
     currentAppData = data; 
     window.safeSetText('display-nombre', data["Nombre + Edad"] || "Usuario IMNUFIT");
     
-    if (chatHistory.length === 0) window.clearChat();
+    // Eliminado el "clearChat" forzado para proteger la memoria al navegar entre pantallas
     
-    const g = window.getGreeting(); 
+    const g = window.getGreeting();
     window.safeUpdate('display-greeting', (el) => el.innerHTML = `<span class="text-xl mr-2">${g.icon}</span> ${g.text}`);
     
     const st = data["Estatus"] || "Activo";
@@ -1054,9 +1104,12 @@ onAuthStateChanged(auth, async (user) => {
             }
         }
 
-        window.refreshUIWithData(); window.syncAIInstructions(); window.showView('patient-view', false);
+        window.refreshUIWithData(); 
+        window.syncAIInstructions(); 
+        window.loadChatMemory(); // <-- DESPIERTA LA MEMORIA AL INICIAR SESIÓN
+        window.showView('patient-view', false);
     } else { 
-        window.resetUI(); 
+        window.resetUI();
         const sp = document.getElementById('specialist-panel'); if(sp) sp.classList.add('hidden');
         isSpecialistMode = false; window.showView('login-view', false); 
     }
