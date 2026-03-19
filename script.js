@@ -489,17 +489,10 @@ window.updateMicUI = (source, state) => {
 };
 
 window.startVoiceRecognition = (source, isAutoRestart = false) => {
-    // LLAVE MAESTRA SECUENCIADA: Evitamos que el celular se quede sordo al iniciar
     if (!window.audioUnlocked && !isAutoRestart) {
         window.audioUnlocked = true;
         window.globalAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; 
         window.globalAudio.play().catch(()=>{});
-        
-        // Esperamos 100 milisegundos para que el celular termine de procesar el audio antes de abrir el micrófono
-        setTimeout(() => {
-            window.startVoiceRecognition(source, true);
-        }, 100);
-        return; 
     }
 
     if (!isAutoRestart && window.isConversationMode) {
@@ -528,7 +521,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         window.updateMicUI(source, 'listening');
         playEarcon(); 
         
-        // PERRO GUARDIÁN AJUSTADO A 10 SEGUNDOS
+        // PERRO GUARDIÁN (10 Segundos de INACTIVIDAD)
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
         window.micWatchdog = setTimeout(() => {
             if (window.isConversationMode && !window.lastInteractionWasVoice) {
@@ -540,9 +533,10 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         }, 10000); 
     };
 
-    recognition.onspeechstart = () => {
-        if (window.micWatchdog) clearTimeout(window.micWatchdog);
-    };
+    // BLINDAJE MÓVIL: Matamos el Perro Guardián si el celular detecta CUALQUIER actividad
+    recognition.onaudiostart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
+    recognition.onsoundstart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
+    recognition.onspeechstart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
     
     recognition.onresult = (event) => {
         if (window.micWatchdog) clearTimeout(window.micWatchdog); 
