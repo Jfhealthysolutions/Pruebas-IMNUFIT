@@ -638,6 +638,7 @@ window.sendMessageToAI = async (source) => {
     3. Alcance: Solo temas de IMNUFIT o la salud del paciente.
     4. Prioridad Absoluta: La información de Airtable dicta el plan específico, pero SIEMPRE respetando la Regla de Oro.
     5. DETECCIÓN DE DESPEDIDA: Si el paciente dice frases como "gracias", "adiós", "chao", "nos vemos" o implica que ya no necesita más ayuda por ahora, despídete cortésmente y OBLIGATORIAMENTE añade al final de tu respuesta la etiqueta secreta [END_CONVO].
+    6. PROHIBIDO PENSAR EN VOZ ALTA: Tienes ESTRICTAMENTE PROHIBIDO escribir "SILENT THOUGHT", "Thinking Process" o explicar cómo extraes la información. Da SOLO la respuesta final y directa al paciente.
 
     👨‍🍳 --- MÓDULO: CHEF CLÍNICO INTERACTIVO --- 👨‍🍳
     Si el paciente pide una receta o ideas para cocinar:
@@ -682,11 +683,15 @@ window.sendMessageToAI = async (source) => {
         
         let aiText = res.candidates?.[0]?.content?.parts?.[0]?.text || "No pude procesar tu solicitud.";
         
+        // INTERCEPTOR ANTIFILTRACIONES (Borramos a la fuerza cualquier "SILENT THOUGHT" que intente colarse)
+        aiText = aiText.replace(/SILENT THOUGHT:[\s\S]*?\n\n/gi, '').trim();
+        aiText = aiText.replace(/SILENT THOUGHT/gi, '').trim();
+        
         // INTERCEPTOR DE DESPEDIDA
         let shouldEndConversation = false;
         if (aiText.includes('[END_CONVO]')) {
             shouldEndConversation = true;
-            aiText = aiText.replace(/\[END_CONVO\]/g, '').trim(); // Borramos la etiqueta para que no se vea en pantalla
+            aiText = aiText.replace(/\[END_CONVO\]/g, '').trim();
         }
         
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
@@ -697,9 +702,9 @@ window.sendMessageToAI = async (source) => {
         if (window.lastInteractionWasVoice) {
             window.updateMicUI(source, 'speaking');
             
-            // ASPIRADORA FONÉTICA: Limpiamos todo el código y formato visual antes de que la IA hable
+            // ASPIRADORA FONÉTICA
             const cleanText = aiText
-                .replace(/IMNUFIT/g, 'Imnúfit') 
+                .replace(/IMNUFIT/g, 'Imnufít') 
                 .replace(/\[(PRO|VEG|FAT|EXT|SPICE)(?:-HDR)?\]/g, '') 
                 .replace(/-{2,}/g, '') 
                 .replace(/(^|\n)\s*-\s/g, '$1 ') 
@@ -737,13 +742,12 @@ window.sendMessageToAI = async (source) => {
                 if (currentIndex >= sentences.length) {
                     window.lastInteractionWasVoice = false;
                     
-                    // EJECUTAMOS LA DESPEDIDA SI ES NECESARIO
                     if (window.isConversationMode && !shouldEndConversation) {
                         window.startVoiceRecognition(source, true);
                     } else {
                         window.isConversationMode = false;
                         window.updateMicUI(source, 'idle');
-                        playStopEarcon(); // Suena el tono de cierre
+                        playStopEarcon(); 
                     }
                     return;
                 }
@@ -760,7 +764,6 @@ window.sendMessageToAI = async (source) => {
                     window.globalAudio.onended = () => { currentIndex++; playNext(); };
                     window.globalAudio.onerror = () => { currentIndex++; playNext(); };
                     window.globalAudio.play().catch((err) => { 
-                        console.error("Bloqueo de Autoplay Apple/Android:", err);
                         currentIndex++; playNext(); 
                     });
                 } else {
