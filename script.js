@@ -522,7 +522,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         window.updateMicUI(source, 'listening');
         playEarcon(); 
         
-        // PERRO GUARDIÁN (Ajustado a 15 segundos para no cortar al paciente)
+        // PERRO GUARDIÁN: Solo vigila el silencio inicial
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
         window.micWatchdog = setTimeout(() => {
             if (window.isConversationMode && !window.lastInteractionWasVoice) {
@@ -532,6 +532,11 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
                 playStopEarcon();
             }
         }, 15000); 
+    };
+
+    // NUEVO: Si el paciente empieza a hablar, MATAMOS al Perro Guardián
+    recognition.onspeechstart = () => {
+        if (window.micWatchdog) clearTimeout(window.micWatchdog);
     };
     
     recognition.onresult = (event) => {
