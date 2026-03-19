@@ -231,23 +231,30 @@ window.parseAIResponse = (text) => {
     
     html = html.replace(/\n/g, '<br>');
 
-    // SISTEMA DE ÍCONOS PREMIUM PARA RECETAS
-    html = html.replace(/\[VEG\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-emerald-100 text-emerald-600 rounded-lg shadow-sm"><i class="fa-solid fa-leaf text-[10px]"></i></span>');
-    html = html.replace(/\[PRO\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-rose-100 text-rose-600 rounded-lg shadow-sm"><i class="fa-solid fa-drumstick-bite text-[10px]"></i></span>');
-    html = html.replace(/\[FAT\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-amber-100 text-amber-500 rounded-lg shadow-sm"><i class="fa-solid fa-droplet text-[10px]"></i></span>');
-    html = html.replace(/\[EXT\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-slate-100 text-slate-500 rounded-lg shadow-sm"><i class="fa-solid fa-utensils text-[10px]"></i></span>');
-    
+    // 1. SISTEMA DE ÍCONOS EN CABECERAS DE RECETAS (Subimos de nivel)
+    // Buscamos los tags en los títulos ### y dibujamos el icono al lado del título.
+    // Iconos un poco más grandes (w-8 h-8) para cabecera.
+    html = html.replace(/###\s*\[VEG-HDR\]\s*(.*?)(<br>|$)/g, '<div class="mt-6 flex items-center gap-3"><span class="inline-flex items-center justify-center w-8 h-8 bg-emerald-100 text-emerald-600 rounded-xl shadow-sm"><i class="fa-solid fa-leaf text-base"></i></span><h3 class="text-base font-bold text-slate-900 tracking-tight">$1</h3></div>');
+    html = html.replace(/###\s*\[PRO-HDR\]\s*(.*?)(<br>|$)/g, '<div class="mt-6 flex items-center gap-3"><span class="inline-flex items-center justify-center w-8 h-8 bg-rose-100 text-rose-600 rounded-xl shadow-sm"><i class="fa-solid fa-drumstick-bite text-base"></i></span><h3 class="text-base font-bold text-slate-900 tracking-tight">$1</h3></div>');
+    html = html.replace(/###\s*\[FAT-HDR\]\s*(.*?)(<br>|$)/g, '<div class="mt-6 flex items-center gap-3"><span class="inline-flex items-center justify-center w-8 h-8 bg-amber-100 text-amber-500 rounded-xl shadow-sm"><i class="fa-solid fa-droplet text-base"></i></span><h3 class="text-base font-bold text-slate-900 tracking-tight">$1</h3></div>');
+    // Nuevo icono para especias: fa-mortar-pestle (mortero)
+    html = html.replace(/###\s*\[SPICE-HDR\]\s*(.*?)(<br>|$)/g, '<div class="mt-6 flex items-center gap-3"><span class="inline-flex items-center justify-center w-8 h-8 bg-slate-100 text-slate-500 rounded-xl shadow-sm"><i class="fa-solid fa-mortar-pestle text-base"></i></span><h3 class="text-base font-bold text-slate-900 tracking-tight">$1</h3></div>');
+
+    // 2. Formatear negritas y cursivas normales
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
     html = html.replace(/\*(.*?)\*/g, '<em class="italic text-slate-600">$1</em>');
     
+    // 3. Botones internos
     html = html.replace(/\[([^\]]+)\]\(function:([a-zA-Z0-9-]+)\)/g, `<button type="button" onclick="window.handleAIAction('$2')" class="mt-3 flex items-center gap-2 bg-[#2E4982]/10 text-[#2E4982] px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#2E4982] hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start"><span>$1</span></button>`);
     
+    // 4. Enlaces externos
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, `<a href="$2" target="_blank" class="mt-3 flex items-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-100 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start decoration-0"><span>$1</span></a>`);
     
-    html = html.replace(/^\s*-\s+(?!(<span))/gm, '<li class="ml-4 list-disc marker:text-[#2E4982] pl-1 mb-1">');
+    // 5. Listas normales (los ingredientes son listas estándar)
+    // Viñetas azules IMNUFIT, texto limpio sin spans raros al lado.
+    html = html.replace(/^\s*-\s+(.*)$/gm, '<li class="ml-4 list-disc marker:text-[#2E4982] pl-1 mb-1">$1</li>');
+    // Envolver listas
     html = html.replace(/(<li.*<\/li>)/s, '<ul class="my-2 space-y-1 text-left">$1</ul>');
-    
-    html = html.replace(/^\s*-\s+(<span.*?>.*?<\/span>)/gm, '<div class="flex items-center mb-2">$1');
     
     return html;
 };
@@ -624,14 +631,14 @@ window.sendMessageToAI = async (source) => {
     Eres su Chef Clínico. 
     1. CRUCE DE DATOS: Compara los ingredientes del paciente con su plan en Airtable y la Regla de Oro.
     2. INTERCEPCIÓN CLÍNICA: Si menciona un ingrediente PROHIBIDO, frena amablemente, explícale por qué, y sugiere un sustituto permitido.
-    3. RECETA Y DISEÑO PREMIUM: Da el paso a paso. Para la lista de ingredientes, DEBES usar estas etiquetas exactas al inicio de cada línea para que el sistema dibuje iconos profesionales:
-       - Para vegetales/verduras usa [VEG]
-       - Para proteínas/carnes/huevos usa [PRO]
-       - Para grasas/aceites/aguacate usa [FAT]
-       - Para extras/especias usa [EXT]
-       Ejemplo de formato:
-       - [PRO] **Pechuga de pollo:** 150g en tiras.
-       - [VEG] **Tomates:** 5 unidades en brunoise.
+    3. DISEÑO PREMIUM (AGRUPACIÓN POR MACRO): Diseña la receta. La lista de ingredientes DEBE estar agrupada estrictamente por macronutrientes.
+       - Los ingredientes dentro de la lista son solo texto: - **Ingrediente:** cantidad.
+       - **PROHIBIDO** poner iconos o tags ([VEG], [PRO], etc.) al lado de los ingredientes individuales.
+       - **OBLIGATORIO** usar estos títulos de sección Markdown EXACTOS con sus tags para categorizar (el sistema dibujará el icono en el título):
+         ### [PRO-HDR] Proteínas (Icono carne)
+         ### [VEG-HDR] Carbohidratos y Vegetales (Icono hoja)
+         ### [FAT-HDR] Grasas Saludables (Icono gota amarillo)
+         ### [SPICE-HDR] Especias y Extras (Icono mortero gris)
     4. INTERACCIÓN FINAL: Cierra diciendo: "¡Me encantaría ver cómo te queda! Cuando termines, tómale una foto a tu plato y súbela aquí para analizarlo juntos."
 
     REGLAS DE ACCIÓN OBLIGATORIAS:
