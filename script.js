@@ -576,47 +576,70 @@ window.sendMessageToAI = async (source) => {
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
 
-        // --- SISTEMA DE VOZ BIDIRECCIONAL (Bucle Continuo) ---
+        // --- SISTEMA DE VOZ BIDIRECCIONAL (Fragmentación / Latencia Cero) ---
         if (window.lastInteractionWasVoice) {
-            const textToSpeak = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
+            window.updateMicUI(source, 'speaking');
+            
+            // Limpiar y dividir texto en oraciones cortas
+            const cleanText = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
+            const sentences = cleanText.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 0);
+            
             const ttsKey = "AIzaSyDGprBQ8u5UZAL_B1kostoNCpBOonyX1OA"; 
             const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsKey}`;
 
-            try {
-                window.updateMicUI(source, 'speaking'); // IA Hablando (Visual)
+            let currentIndex = 0;
+            let audioQueue = [];
 
-                const ttsRes = await fetch(ttsUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        input: { text: textToSpeak },
-                        voice: { languageCode: 'es-US', name: 'es-US-Journey-F' },
-                        audioConfig: { audioEncoding: 'MP3' }
-                    })
-                });
-                
-                const ttsData = await ttsRes.json();
-                
-                if (ttsData.audioContent) {
-                    if (window.currentAudio) window.currentAudio.pause();
-                    window.currentAudio = new Audio("data:audio/mp3;base64," + ttsData.audioContent);
-                    
-                    window.currentAudio.onended = () => {
-                        window.lastInteractionWasVoice = false;
-                        if (window.isConversationMode) {
-                            window.startVoiceRecognition(source, true);
-                        } else {
-                            window.updateMicUI(source, 'idle');
-                        }
-                    };
-                    
-                    window.currentAudio.play();
-                } else {
+            // Petición individual por fragmento
+            const fetchAudio = async (text) => {
+                try {
+                    const res = await fetch(ttsUrl, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            input: { text: text },
+                            voice: { languageCode: 'es-US', name: 'es-US-Journey-F' },
+                            audioConfig: { audioEncoding: 'MP3' }
+                        })
+                    });
+                    const data = await res.json();
+                    return data.audioContent ? new Audio("data:audio/mp3;base64," + data.audioContent) : null;
+                } catch (e) { return null; }
+            };
+
+            // Motor de reproducción en cadena
+            const playNext = async () => {
+                if (!window.isConversationMode && !window.lastInteractionWasVoice) return; // Si el usuario canceló
+
+                if (currentIndex >= sentences.length) {
+                    // Terminó de hablar todo el mensaje
                     window.lastInteractionWasVoice = false;
                     if (window.isConversationMode) window.startVoiceRecognition(source, true);
                     else window.updateMicUI(source, 'idle');
+                    return;
                 }
-            } catch (err) {
+
+                // Reproducir el audio actual
+                let audio = audioQueue[currentIndex];
+                if (!audio) audio = await fetchAudio(sentences[currentIndex]);
+
+                // PRECARGAR el siguiente en segundo plano (Magia de latencia cero)
+                if (currentIndex + 1 < sentences.length) {
+                    fetchAudio(sentences[currentIndex + 1]).then(a => audioQueue[currentIndex + 1] = a);
+                }
+
+                if (audio) {
+                    if (window.currentAudio) window.currentAudio.pause();
+                    window.currentAudio = audio;
+                    audio.onended = () => { currentIndex++; playNext(); };
+                    audio.play().catch(() => { currentIndex++; playNext(); });
+                } else {
+                    currentIndex++; playNext();
+                }
+            };
+
+            if (sentences.length > 0) playNext();
+            else {
                 window.lastInteractionWasVoice = false;
                 if (window.isConversationMode) window.startVoiceRecognition(source, true);
                 else window.updateMicUI(source, 'idle');
