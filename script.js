@@ -347,6 +347,61 @@ window.closeMobileChat = () => { window.showView('patient-view'); window.clearCh
 window.openAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.remove('hidden'); document.getElementById('ai-training-modal')?.classList.add('flex'); };
 window.closeAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.add('hidden'); };
 
+window.syncAIInstructions = async () => {
+    if (!auth.currentUser) return;
+    const aiDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'ai_config', 'instructions');
+    onSnapshot(aiDocRef, (snap) => {
+        const textEl = document.getElementById('ai-training-text');
+        const infoEl = document.getElementById('ai-last-update');
+        if (snap.exists()) {
+            const data = snap.data();
+            aiCustomInstructions = data.content || "";
+            if(textEl && document.activeElement !== textEl) textEl.value = aiCustomInstructions;
+            if(infoEl) {
+                const date = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleString() : "Desconocido";
+                const user = data.updatedBy || "Sistema";
+                infoEl.innerHTML = `Última modificación: <strong>${date}</strong><br>Por: ${user}`;
+            }
+        }
+    }, (err) => console.log("AI Sync Active"));
+};
+
+window.saveAITraining = async () => {
+    const text = document.getElementById('ai-training-text').value;
+    const btn = document.getElementById('btn-save-ai-training');
+    if (!auth.currentUser) return;
+    btn.disabled = true; btn.textContent = "Guardando...";
+    try {
+        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ai_config', 'instructions'), { 
+            content: text, 
+            updatedBy: auth.currentUser?.email, 
+            timestamp: new Date() 
+        });
+        window.notify("Entrenamiento guardado", "success"); 
+        window.closeAITrainingModal();
+    } catch (e) { window.notify("Error al guardar"); }
+    finally { btn.disabled = false; btn.textContent = "Guardar Cambios"; }
+};
+
+async function fetchWithRetry(url, options, retries = 3) {
+    const backoffs = [1000, 2000, 4000, 8000];
+    for (let i = 0; i <= retries; i++) {
+        try {
+            const response = await fetch(url, options);
+            if (response.status === 429) {
+                if (i === retries) throw new Error("quota-exceeded");
+                await new Promise(r => setTimeout(r, backoffs[i]));
+                continue;
+            }
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } catch (error) {
+            if (i === retries || error.message === "quota-exceeded") throw error;
+            await new Promise(r => setTimeout(r, backoffs[i]));
+        }
+    }
+}
+
 window.currentRecognition = null;
 window.isConversationMode = false;
 window.currentAudio = null;
