@@ -229,28 +229,25 @@ window.parseAIResponse = (text) => {
     if (!text) return "";
     let html = text;
     
-    // 1. Saltos de línea PRIMERO (para no romper el código que inyectaremos después)
     html = html.replace(/\n/g, '<br>');
 
-    // 2. MOTOR DE IMÁGENES (Una sola línea blindada, sin saltos)
-    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/image\.pollinations\.ai[^\)]+)\)/g, function(match, alt, url) {
-        let cleanUrl = url.trim().replace(/\s+/g, '%20');
-        return `<div class="my-5 flex flex-col items-center"><img src="${cleanUrl}" alt="${alt}" referrerpolicy="no-referrer" class="w-full max-w-[280px] md:max-w-[350px] rounded-2xl shadow-sm border border-slate-200 object-cover"><p class="text-[10px] text-slate-400 mt-2 italic">Sugerencia visual del Chef</p></div>`;
-    });
+    // SISTEMA DE ÍCONOS PREMIUM PARA RECETAS
+    html = html.replace(/\[VEG\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-emerald-100 text-emerald-600 rounded-lg shadow-sm"><i class="fa-solid fa-leaf text-[10px]"></i></span>');
+    html = html.replace(/\[PRO\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-rose-100 text-rose-600 rounded-lg shadow-sm"><i class="fa-solid fa-drumstick-bite text-[10px]"></i></span>');
+    html = html.replace(/\[FAT\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-amber-100 text-amber-500 rounded-lg shadow-sm"><i class="fa-solid fa-droplet text-[10px]"></i></span>');
+    html = html.replace(/\[EXT\]/g, '<span class="inline-flex items-center justify-center w-6 h-6 mr-2 bg-slate-100 text-slate-500 rounded-lg shadow-sm"><i class="fa-solid fa-utensils text-[10px]"></i></span>');
     
-    // 3. Negritas y cursivas
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
     html = html.replace(/\*(.*?)\*/g, '<em class="italic text-slate-600">$1</em>');
     
-    // 4. Botones internos
     html = html.replace(/\[([^\]]+)\]\(function:([a-zA-Z0-9-]+)\)/g, `<button type="button" onclick="window.handleAIAction('$2')" class="mt-3 flex items-center gap-2 bg-[#2E4982]/10 text-[#2E4982] px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#2E4982] hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start"><span>$1</span></button>`);
     
-    // 5. Enlaces externos
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, `<a href="$2" target="_blank" class="mt-3 flex items-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-100 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start decoration-0"><span>$1</span></a>`);
     
-    // 6. Listas
-    html = html.replace(/^\s*-\s+(.*)$/gm, '<li class="ml-4 list-disc marker:text-[#2E4982] pl-1 mb-1">$1</li>');
+    html = html.replace(/^\s*-\s+(?!(<span))/gm, '<li class="ml-4 list-disc marker:text-[#2E4982] pl-1 mb-1">');
     html = html.replace(/(<li.*<\/li>)/s, '<ul class="my-2 space-y-1 text-left">$1</ul>');
+    
+    html = html.replace(/^\s*-\s+(<span.*?>.*?<\/span>)/gm, '<div class="flex items-center mb-2">$1');
     
     return html;
 };
@@ -609,27 +606,33 @@ window.sendMessageToAI = async (source) => {
 
     INSTRUCCIONES CLAVE DEL ADMINISTRADOR: ${aiCustomInstructions}
     
-    🔥 REGLA DE ORO INQUEBRANTABLE (NUTRICIÓN IMNUFIT) 🔥
-    NUNCA, bajo ninguna circunstancia, sugieras, recomiendes o incluyas AZÚCAR, HARINAS, GRANOS o CEREALES en ninguna de tus respuestas, consejos o recetas. Esta regla es absoluta.
-
+    🔥 REGLA DE ORO INQUEBRANTABLE: NUNCA, bajo ninguna circunstancia, sugieras, recomiendes o incluyas AZÚCAR, HARINAS, GRANOS o CEREALES en ninguna de tus respuestas, consejos o recetas. Esta regla es absoluta para el protocolo IMNUFIT.
+    
     DIRECTRICES ESTRICTAS:
-    1. Estilo: Claro, preciso, amable y fluido. Respeta el formato de **negritas** y puntuación.
+    1. Estilo: Claro, preciso, profesional y fluido. NUNCA uses emojis para representar alimentos.
     2. Formato Enlaces: Usa botones Markdown: [Texto del Botón](URL o funcion).
     3. Alcance: Solo temas de IMNUFIT o la salud del paciente.
-    4. Prioridad: Usa SOLO la información de Airtable para planes.
-    5. Análisis de Imágenes: Si te envían una foto de comida, analízala estrictamente basándote en la Regla de Oro y su plan.
+    4. Prioridad Absoluta: La información de Airtable dicta el plan específico, pero SIEMPRE respetando la Regla de Oro.
 
-    👨‍🍳 --- MÓDULO: CHEF CLÍNICO VISUAL --- 👨‍🍳
-    Si el paciente te pide una receta, dice qué ingredientes tiene o pide ideas para cocinar, actúa según su membresía:
+    👨‍🍳 --- MÓDULO: CHEF CLÍNICO INTERACTIVO --- 👨‍🍳
+    Si el paciente pide una receta o ideas para cocinar:
     
     CASO A (ESTÁNDAR): 
-    Dile muy amablemente que el "Chef Clínico Visual" que crea recetas paso a paso con imágenes es un beneficio exclusivo de la membresía Deluxe. Anímalo a subir de nivel y ofrécele el botón para gestionar su cuenta: [Mi Cuenta](function:membership-view). NUNCA le des la receta.
+    Dile amablemente que el "Chef Clínico Interactivo" es un beneficio exclusivo de la membresía Deluxe. Ofrécele el botón: [Mi Cuenta](function:membership-view). NUNCA des la receta.
     
     CASO B (DELUXE): 
-    1. Eres su Chef Clínico. Actúa encantado de ayudar.
-    2. Diseña una receta paso a paso usando los ingredientes que te dio (o sugiriendo unos acordes a su plan), respetando siempre la Regla de Oro.
-    3. MAGIA VISUAL: AL FINAL de tu respuesta, DEBES adjuntar una fotografía del platillo terminado. Para hacerlo, usa EXACTAMENTE este formato Markdown, cambiando {plato_en_ingles} por una descripción corta de tu receta en inglés (ej: grilled_chicken_with_avocado_salad):
-    ![Platillo](https://image.pollinations.ai/prompt/{plato_en_ingles},professional%20food%20photography,cinematic%20lighting,4k,realistic?width=800&height=600&nologo=true)
+    Eres su Chef Clínico. 
+    1. CRUCE DE DATOS: Compara los ingredientes del paciente con su plan en Airtable y la Regla de Oro.
+    2. INTERCEPCIÓN CLÍNICA: Si menciona un ingrediente PROHIBIDO, frena amablemente, explícale por qué, y sugiere un sustituto permitido.
+    3. RECETA Y DISEÑO PREMIUM: Da el paso a paso. Para la lista de ingredientes, DEBES usar estas etiquetas exactas al inicio de cada línea para que el sistema dibuje iconos profesionales:
+       - Para vegetales/verduras usa [VEG]
+       - Para proteínas/carnes/huevos usa [PRO]
+       - Para grasas/aceites/aguacate usa [FAT]
+       - Para extras/especias usa [EXT]
+       Ejemplo de formato:
+       - [PRO] **Pechuga de pollo:** 150g en tiras.
+       - [VEG] **Tomates:** 5 unidades en brunoise.
+    4. INTERACCIÓN FINAL: Cierra diciendo: "¡Me encantaría ver cómo te queda! Cuando termines, tómale una foto a tu plato y súbela aquí para analizarlo juntos."
 
     REGLAS DE ACCIÓN OBLIGATORIAS:
     - Agendar/Modificar/Cancelar Citas: [Gestionar Citas](${info["Link Calendar"] || CALENDAR_LINK_DEFAULT}).
