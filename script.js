@@ -684,7 +684,8 @@ window.sendMessageToAI = async (source) => {
         if (window.lastInteractionWasVoice) {
             window.updateMicUI(source, 'speaking');
             
-            const cleanText = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
+            // Filtro Fonético: Engañamos al motor de voz para que lea la marca como palabra y no como siglas
+            const cleanText = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '').replace(/IMNUFIT/g, 'Imnufít');
             const sentences = cleanText.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 0);
             
             const ttsKey = "AIzaSyDGprBQ8u5UZAL_B1kostoNCpBOonyX1OA"; 
