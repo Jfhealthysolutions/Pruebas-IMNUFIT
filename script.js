@@ -229,22 +229,40 @@ window.parseAIResponse = (text) => {
     if (!text) return "";
     let html = text;
     
-    // 1. PRIMERO: Detectar Imágenes Markdown ![alt](url) y convertirlas en fotos reales dentro del chat
-    // --- CORRECCIÓN PREMIUM ---
-    // Añadimos referrerpolicy="no-referrer" para saltarnos los bloqueos de hotlinking del motor de IA gratuito
-    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '<div class="my-4 flex justify-center"><img src="$2" alt="$1" referrerpolicy="no-referrer" class="w-full max-w-[280px] md:max-w-[350px] rounded-2xl shadow-sm border border-slate-200 object-cover"></div>');
+    // 1. MOTOR DE RENDERIZADO DE IMÁGENES (VERSIÓN BLINDADA)
+    // Detectamos el Markdown de imagen, limpiamos la URL y forzamos la carga sin restricciones
+    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/image\.pollinations\.ai\/prompt\/[^\s\)]+)\)/g, (match, alt, url) => {
+        // Limpiamos la URL de posibles espacios o caracteres que Gemini meta por error
+        const cleanUrl = url.trim().replace(/\s+/g, '%20');
+        return `
+            <div class="my-5 flex flex-col items-center">
+                <div class="relative w-full max-w-[320px] aspect-video bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+                    <img 
+                        src="${cleanUrl}" 
+                        alt="${alt}" 
+                        referrerpolicy="no-referrer"
+                        crossorigin="anonymous"
+                        loading="lazy"
+                        class="w-full h-full object-cover transition-opacity duration-500 opacity-0"
+                        onload="this.classList.remove('opacity-0'); this.classList.add('opacity-100');"
+                        onerror="this.parentElement.innerHTML='<div class="p-4 text-[10px] text-slate-400 italic text-center">Cargando imagen del platillo...</div>'"
+                    >
+                </div>
+                <p class="text-[10px] text-slate-400 mt-2 italic">Sugerencia visual del Chef</p>
+            </div>`;
+    });
     
-    // 2. LUEGO: Formatear negritas y cursivas
+    // 2. Formatear negritas y cursivas
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
     html = html.replace(/\*(.*?)\*/g, '<em class="italic text-slate-600">$1</em>');
     
-    // 3. LUEGO: Formatear botones de función interna de la app
+    // 3. Botones de función
     html = html.replace(/\[([^\]]+)\]\(function:([a-zA-Z0-9-]+)\)/g, `<button type="button" onclick="window.handleAIAction('$2')" class="mt-3 flex items-center gap-2 bg-[#2E4982]/10 text-[#2E4982] px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#2E4982] hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start"><span>$1</span></button>`);
     
-    // 4. LUEGO: Formatear enlaces normales externos (evitando tocar las imágenes)
+    // 4. Enlaces externos
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, `<a href="$2" target="_blank" class="mt-3 flex items-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-100 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start decoration-0"><span>$1</span></a>`);
     
-    // 5. FINAL: Formatear listas y saltos de línea
+    // 5. Listas y saltos
     html = html.replace(/^\s*-\s+(.*)$/gm, '<li class="ml-4 list-disc marker:text-[#2E4982] pl-1 mb-1">$1</li>');
     html = html.replace(/(<li.*<\/li>)/s, '<ul class="my-2 space-y-1 text-left">$1</ul>');
     html = html.replace(/\n/g, '<br>');
