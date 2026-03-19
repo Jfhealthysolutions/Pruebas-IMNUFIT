@@ -230,7 +230,9 @@ window.parseAIResponse = (text) => {
     let html = text;
     
     // 1. PRIMERO: Detectar Imágenes Markdown ![alt](url) y convertirlas en fotos reales dentro del chat
-    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '<div class="my-4 flex justify-center"><img src="$2" alt="$1" class="w-full max-w-[280px] md:max-w-[350px] rounded-2xl shadow-sm border border-slate-200 object-cover"></div>');
+    // --- CORRECCIÓN PREMIUM ---
+    // Añadimos referrerpolicy="no-referrer" para saltarnos los bloqueos de hotlinking del motor de IA gratuito
+    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '<div class="my-4 flex justify-center"><img src="$2" alt="$1" referrerpolicy="no-referrer" class="w-full max-w-[280px] md:max-w-[350px] rounded-2xl shadow-sm border border-slate-200 object-cover"></div>');
     
     // 2. LUEGO: Formatear negritas y cursivas
     html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
@@ -249,7 +251,6 @@ window.parseAIResponse = (text) => {
     
     return html;
 };
-
 window.scrollToBottom = () => {
     const m = document.getElementById('ai-messages-mobile'), d = document.getElementById('ai-messages-desktop');
     if(m) m.scrollTop = m.scrollHeight; if(d) d.scrollTop = d.scrollHeight;
