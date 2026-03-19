@@ -351,23 +351,46 @@ window.currentRecognition = null;
 window.isConversationMode = false;
 window.currentAudio = null;
 
-window.startVoiceRecognition = (source, isAutoRestart = false) => {
-    const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
+// --- NUEVO: Controlador Visual Dinámico del Micrófono ---
+window.updateMicUI = (source, state) => {
     const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
+    const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
+    if (!btn || !input) return;
 
-    // Si el paciente toca el botón manualmente para APAGAR el bucle
+    // Íconos SVG
+    const svgMic = `<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"></path></svg>`;
+    const svgStopRed = `<span class="relative flex h-5 w-5 justify-center items-center"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-80"></span><svg class="relative w-3.5 h-3.5 text-red-600" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"></path></svg></span>`;
+    const svgStopBlue = `<span class="relative flex h-5 w-5 justify-center items-center"><span class="animate-pulse absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-80"></span><svg class="relative w-3.5 h-3.5 text-[#2E4982]" fill="currentColor" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"></path></svg></span>`;
+
+    if (state === 'idle') {
+        btn.innerHTML = svgMic;
+        btn.className = "p-2 text-slate-400 hover:text-[#2E4982] cursor-pointer transition-colors shrink-0 flex items-center justify-center";
+        input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
+    } else if (state === 'listening') {
+        btn.innerHTML = svgStopRed;
+        btn.className = "p-2 cursor-pointer transition-colors shrink-0 flex items-center justify-center";
+        input.placeholder = "Escuchando... (Toca para detener)";
+    } else if (state === 'processing') {
+        btn.innerHTML = svgMic;
+        btn.className = "p-2 text-slate-300 shrink-0 flex items-center justify-center opacity-50";
+        input.placeholder = "Pensando...";
+    } else if (state === 'speaking') {
+        btn.innerHTML = svgStopBlue;
+        btn.className = "p-2 cursor-pointer transition-colors shrink-0 flex items-center justify-center";
+        input.placeholder = "Hablando... (Toca para detener)";
+    }
+};
+
+window.startVoiceRecognition = (source, isAutoRestart = false) => {
+    // Si el paciente presiona el botón STOP para cancelar
     if (!isAutoRestart && window.isConversationMode) {
         window.isConversationMode = false;
         if (window.currentRecognition) window.currentRecognition.abort();
-        if (window.currentAudio) window.currentAudio.pause();
-        
-        input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
-        btn.classList.remove('text-red-500', 'animate-pulse');
-        btn.classList.add('text-slate-400');
+        if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
+        window.updateMicUI(source, 'idle');
         return;
     }
 
-    // Encender o mantener Modo Conversación
     window.isConversationMode = true;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -381,229 +404,48 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     recognition.maxAlternatives = 1;
     
     recognition.onstart = () => {
-        input.placeholder = "Escuchando... (Modo Manos Libres)";
-        btn.classList.add('text-red-500', 'animate-pulse');
-        btn.classList.remove('text-slate-400');
+        window.updateMicUI(source, 'listening');
     };
     
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
-        input.value = transcript;
+        const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
+        if(input) input.value = transcript;
+        
         window.lastInteractionWasVoice = true; 
-        
-        // Pausa visual mientras la IA piensa
-        input.placeholder = "Procesando...";
-        btn.classList.remove('animate-pulse');
         window.currentRecognition = null; 
-        
+        window.updateMicUI(source, 'processing');
         window.sendMessageToAI(source);
     };
     
-    recognition.onerror = (event) => { 
-        // Silenciamos errores menores (ej: no hablar) para que el loop no se rompa
+    recognition.onerror = (event) => {
+        if(event.error === 'not-allowed') { 
+            window.isConversationMode = false; 
+            window.updateMicUI(source, 'idle'); 
+        }
     };
     
     recognition.onend = () => {
-        // Reiniciar el loop automáticamente si hay silencio prolongado (y la IA no está procesando)
         if (window.isConversationMode && !window.lastInteractionWasVoice) {
             setTimeout(() => { if (window.isConversationMode) window.startVoiceRecognition(source, true); }, 300);
+        } else if (!window.isConversationMode) {
+            window.updateMicUI(source, 'idle');
         }
     };
     
     try { recognition.start(); } catch(e) {}
 };
-window.updateSpecMode = (val) => { specModeSelection = val; window.refreshUIWithData(); window.showView('patient-view'); };
-
-window.showInstallInstructions = () => {
-    const ua = navigator.userAgent.toLowerCase();
-    const isIOS = /ipad|iphone|ipod/.test(ua) && !window.MSStream;
-    const isAndroid = /android/.test(ua);
-    const isMac = /macintosh|mac os x/.test(ua);
-    const isChrome = /chrome/.test(ua) && !/edg/.test(ua);
-    const isSafari = /safari/.test(ua) && !isChrome;
-    const isChromeIOS = isIOS && /crios/.test(ua);
-    
-    let msg = "";
-    let title = "";
-    
-    if (isIOS) {
-        title = "iPhone / iPad";
-        if (isChromeIOS) {
-            msg = `
-            <div class="text-center space-y-6">
-                <div class="bg-slate-50 p-4 rounded-3xl inline-block border border-slate-100 shadow-sm">
-                    <svg class="w-10 h-10 text-[#2E4982]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"></path></svg>
-                </div>
-                <div><h3 class="text-xl font-bold text-slate-800">${title} (Chrome)</h3></div>
-                <div class="text-left bg-slate-50 p-5 rounded-2xl border border-slate-100 text-sm text-slate-600 space-y-4">
-                    <p class="flex items-start gap-3">
-                        <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
-                        <span>Busca el botón <strong>Compartir</strong> <svg class="w-4 h-4 inline text-[#2E4982] align-text-bottom" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg> arriba, al lado de la barra de dirección.</span>
-                    </p>
-                    <p class="flex items-start gap-3">
-                        <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
-                        <span>Si no lo ves, toca los <strong>tres puntos (...)</strong> y busca "Añadir a pantalla de inicio".</span>
-                    </p>
-                    <p class="flex items-start gap-3">
-                        <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
-                        <span>Confirma pulsando <strong>"Añadir"</strong>.</span>
-                    </p>
-                </div>
-            </div>`;
-        } else {
-            msg = `
-            <div class="text-center space-y-6">
-                <div class="bg-slate-50 p-4 rounded-3xl inline-block border border-slate-100 shadow-sm">
-                    <svg class="w-10 h-10 text-[#2E4982]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                </div>
-                <div><h3 class="text-xl font-bold text-slate-800">${title} (Safari)</h3></div>
-                <ol class="text-sm text-slate-600 space-y-3 text-left bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                    <li class="flex gap-3"><span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0">1</span> <span>Toca el botón <strong>Compartir</strong> <svg class="w-4 h-4 inline text-[#2E4982] align-text-bottom" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg> <strong>abajo</strong> en la barra central.</span></li>
-                    <li class="flex gap-3"><span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0">2</span> <span>Desliza hacia arriba y selecciona <strong>"Agregar a Inicio"</strong>.</span></li>
-                </ol>
-            </div>`;
-        }
-    } else if (isAndroid) {
-        msg = `
-        <div class="text-center space-y-6">
-            <div class="bg-slate-50 p-4 rounded-3xl inline-block border border-slate-100 shadow-sm">
-                <svg class="w-10 h-10 text-[#2E4982]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
-            </div>
-            <div><h3 class="text-xl font-bold text-slate-800">Android</h3></div>
-            <ol class="text-sm text-slate-600 space-y-3 text-left bg-slate-50 p-5 rounded-2xl border border-slate-100">
-                 <li class="flex gap-3"><span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0">1</span> <span>Toca el menú de opciones (los tres puntos <span class="font-bold">⋮</span>) arriba a la derecha.</span></li>
-                 <li class="flex gap-3"><span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0">2</span> <span>Selecciona <strong>"Instalar aplicación"</strong> o "Añadir a pantalla de inicio".</span></li>
-            </ol>
-        </div>`;
-    } else {
-        if (isMac && isSafari) {
-            msg = `
-              <div class="text-center space-y-6">
-                <div class="bg-slate-50 p-4 rounded-3xl inline-block border border-slate-100 shadow-sm">
-                    <svg class="w-10 h-10 text-[#2E4982]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                </div>
-                <div><h3 class="text-xl font-bold text-slate-800">Mac (Safari)</h3></div>
-                <div class="text-left bg-slate-50 p-5 rounded-2xl border border-slate-100 text-sm text-slate-600 space-y-4">
-                    <p class="flex items-start gap-3">
-                        <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
-                        <span>Haz clic en el botón <strong>Compartir</strong> <svg class="w-4 h-4 inline text-[#2E4982] align-text-bottom" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"></path></svg> en la barra de herramientas superior.</span>
-                    </p>
-                    <p class="flex items-start gap-3">
-                         <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
-                         <span>Selecciona <strong>"Agregar al Dock"</strong>.</span>
-                    </p>
-                </div>
-            </div>`;
-        } else if (isChrome) {
-            msg = `
-              <div class="text-center space-y-6">
-                <div class="bg-slate-50 p-4 rounded-3xl inline-block border border-slate-100 shadow-sm">
-                    <svg class="w-10 h-10 text-[#2E4982]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
-                </div>
-                <div><h3 class="text-xl font-bold text-slate-800">PC / Mac (Chrome)</h3></div>
-                <div class="text-left bg-slate-50 p-5 rounded-2xl border border-slate-100 text-sm text-slate-600 space-y-4">
-                    <p class="flex items-start gap-3">
-                        <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">1</span>
-                        <span>Haz clic en los <strong>tres puntos verticales (⋮)</strong> arriba a la derecha del navegador.</span>
-                    </p>
-                    <p class="flex items-start gap-3">
-                         <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">2</span>
-                         <span>Ve a <strong>"Guardar y compartir"</strong> (o "Transmitir, guardar y compartir").</span>
-                    </p>
-                    <p class="flex items-start gap-3">
-                         <span class="bg-white border border-slate-200 rounded-full w-6 h-6 flex items-center justify-center font-bold text-[10px] shrink-0 mt-0.5">3</span>
-                         <span>Haz clic en <strong>"Instalar página como aplicación..."</strong>.</span>
-                    </p>
-                </div>
-            </div>`;
-        } else {
-              msg = `
-              <div class="text-center space-y-6">
-                <div class="bg-slate-50 p-4 rounded-3xl inline-block border border-slate-100 shadow-sm">
-                    <svg class="w-10 h-10 text-[#2E4982]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
-                </div>
-                <div><h3 class="text-xl font-bold text-slate-800">Instalar App</h3></div>
-                <div class="text-left bg-slate-50 p-5 rounded-2xl border border-slate-100 text-sm text-slate-600 space-y-4">
-                    <p>Busca la opción <strong>"Instalar"</strong> o <strong>"Agregar a pantalla de inicio"</strong> en el menú de tu navegador.</p>
-                </div>
-            </div>`;
-        }
-    }
-
-    const modal = document.getElementById('install-modal');
-    const content = document.getElementById('install-modal-content');
-    if(modal && content) {
-        content.innerHTML = msg + `<button onclick="document.getElementById('install-modal').classList.add('hidden')" class="w-full bg-[#2E4982] text-white py-4 rounded-xl font-bold text-xs uppercase shadow-xl tracking-widest hover:scale-[1.02] transition-transform mt-6">Entendido</button>`;
-        modal.classList.remove('hidden');
-        modal.classList.add('flex');
-    }
-};
-
-window.syncAIInstructions = async () => {
-    if (!auth.currentUser) return;
-    const aiDocRef = doc(db, 'artifacts', appId, 'public', 'data', 'ai_config', 'instructions');
-    onSnapshot(aiDocRef, (snap) => {
-        const textEl = document.getElementById('ai-training-text');
-        const infoEl = document.getElementById('ai-last-update');
-        if (snap.exists()) {
-            const data = snap.data();
-            aiCustomInstructions = data.content || "";
-            if(textEl && document.activeElement !== textEl) textEl.value = aiCustomInstructions;
-            if(infoEl) {
-                const date = data.timestamp ? new Date(data.timestamp.seconds * 1000).toLocaleString() : "Desconocido";
-                const user = data.updatedBy || "Sistema";
-                infoEl.innerHTML = `Última modificación: <strong>${date}</strong><br>Por: ${user}`;
-            }
-        }
-    }, (err) => console.log("AI Sync Active"));
-};
-
-window.saveAITraining = async () => {
-    const text = document.getElementById('ai-training-text').value;
-    const btn = document.getElementById('btn-save-ai-training');
-    if (!auth.currentUser) return;
-    btn.disabled = true; btn.textContent = "Guardando...";
-    try {
-        await setDoc(doc(db, 'artifacts', appId, 'public', 'data', 'ai_config', 'instructions'), { 
-            content: text, 
-            updatedBy: auth.currentUser?.email, 
-            timestamp: new Date() 
-        });
-        window.notify("Entrenamiento guardado", "success"); 
-        window.closeAITrainingModal();
-    } catch (e) { window.notify("Error al guardar"); }
-    finally { btn.disabled = false; btn.textContent = "Guardar Cambios"; }
-};
-
-async function fetchWithRetry(url, options, retries = 3) {
-    const backoffs = [1000, 2000, 4000, 8000];
-    for (let i = 0; i <= retries; i++) {
-        try {
-            const response = await fetch(url, options);
-            if (response.status === 429) {
-                if (i === retries) throw new Error("quota-exceeded");
-                await new Promise(r => setTimeout(r, backoffs[i]));
-                continue;
-            }
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
-            return await response.json();
-        } catch (error) {
-            if (i === retries || error.message === "quota-exceeded") throw error;
-            await new Promise(r => setTimeout(r, backoffs[i]));
-        }
-    }
-}
 
 window.sendMessageToAI = async (source) => {
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     const userMsg = input?.value.trim();
     
+    // Cancelación manual al enviar texto escrito
     if (!window.lastInteractionWasVoice) {
         window.isConversationMode = false;
         if (window.currentRecognition) { window.currentRecognition.abort(); window.currentRecognition = null; }
         if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
-        const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
-        if(btn) { btn.classList.remove('text-red-500', 'animate-pulse'); btn.classList.add('text-slate-400'); }
+        window.updateMicUI(source, 'idle');
     }
 
     if (!userMsg && !currentImageBase64) return;
@@ -686,6 +528,8 @@ window.sendMessageToAI = async (source) => {
             const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsKey}`;
 
             try {
+                window.updateMicUI(source, 'speaking'); // IA Hablando (Visual)
+
                 const ttsRes = await fetch(ttsUrl, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -704,23 +548,30 @@ window.sendMessageToAI = async (source) => {
                     
                     window.currentAudio.onended = () => {
                         window.lastInteractionWasVoice = false;
-                        if (window.isConversationMode) window.startVoiceRecognition(source, true);
+                        if (window.isConversationMode) {
+                            window.startVoiceRecognition(source, true);
+                        } else {
+                            window.updateMicUI(source, 'idle');
+                        }
                     };
                     
                     window.currentAudio.play();
                 } else {
                     window.lastInteractionWasVoice = false;
                     if (window.isConversationMode) window.startVoiceRecognition(source, true);
+                    else window.updateMicUI(source, 'idle');
                 }
             } catch (err) {
                 window.lastInteractionWasVoice = false;
                 if (window.isConversationMode) window.startVoiceRecognition(source, true);
+                else window.updateMicUI(source, 'idle');
             }
         }
 
     } catch (e) { 
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
         window.appendChatMessageToAll('ai', `⚠️ Hubo un error al procesar. Intenta con una imagen más pequeña o texto.`); 
+        window.updateMicUI(source, 'idle');
     }
 };
 
