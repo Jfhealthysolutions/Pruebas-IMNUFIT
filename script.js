@@ -637,6 +637,7 @@ window.sendMessageToAI = async (source) => {
     2. Formato Enlaces: Usa botones Markdown: [Texto del Botón](URL o funcion).
     3. Alcance: Solo temas de IMNUFIT o la salud del paciente.
     4. Prioridad Absoluta: La información de Airtable dicta el plan específico, pero SIEMPRE respetando la Regla de Oro.
+    5. DETECCIÓN DE DESPEDIDA: Si el paciente dice frases como "gracias", "adiós", "chao", "nos vemos" o implica que ya no necesita más ayuda por ahora, despídete cortésmente y OBLIGATORIAMENTE añade al final de tu respuesta la etiqueta secreta [END_CONVO].
 
     👨‍🍳 --- MÓDULO: CHEF CLÍNICO INTERACTIVO --- 👨‍🍳
     Si el paciente pide una receta o ideas para cocinar:
@@ -679,7 +680,14 @@ window.sendMessageToAI = async (source) => {
             body: JSON.stringify({ contents: [...history, { role: 'user', parts: userParts }], systemInstruction: { parts: [{ text: sysPrompt }] } })
         });
         
-        const aiText = res.candidates?.[0]?.content?.parts?.[0]?.text || "No pude procesar tu solicitud.";
+        let aiText = res.candidates?.[0]?.content?.parts?.[0]?.text || "No pude procesar tu solicitud.";
+        
+        // INTERCEPTOR DE DESPEDIDA
+        let shouldEndConversation = false;
+        if (aiText.includes('[END_CONVO]')) {
+            shouldEndConversation = true;
+            aiText = aiText.replace(/\[END_CONVO\]/g, '').trim(); // Borramos la etiqueta para que no se vea en pantalla
+        }
         
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
         window.appendChatMessageToAll('ai', aiText);
@@ -691,13 +699,13 @@ window.sendMessageToAI = async (source) => {
             
             // ASPIRADORA FONÉTICA: Limpiamos todo el código y formato visual antes de que la IA hable
             const cleanText = aiText
-                .replace(/IMNUFIT/g, 'Imnúfit') // Pronunciación perfecta de tu marca
-                .replace(/\[(PRO|VEG|FAT|EXT|SPICE)(?:-HDR)?\]/g, '') // Elimina nuestras etiquetas secretas de íconos
-                .replace(/-{2,}/g, '') // Elimina líneas de guiones repetidos (----)
-                .replace(/(^|\n)\s*-\s/g, '$1 ') // Elimina los guiones sueltos que actúan como viñetas de lista
-                .replace(/[*_#]/g, '') // Elimina negritas, cursivas y títulos Markdown
-                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // Convierte botones en solo texto hablado
-                .replace(/(?:https?|ftp):\/\/[\n\S]+/g, ''); // Elimina cualquier URL invisible
+                .replace(/IMNUFIT/g, 'Imnúfit') 
+                .replace(/\[(PRO|VEG|FAT|EXT|SPICE)(?:-HDR)?\]/g, '') 
+                .replace(/-{2,}/g, '') 
+                .replace(/(^|\n)\s*-\s/g, '$1 ') 
+                .replace(/[*_#]/g, '') 
+                .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') 
+                .replace(/(?:https?|ftp):\/\/[\n\S]+/g, ''); 
                 
             const sentences = cleanText.split(/(?<=[.?!])\s+|\n+/).map(s => s.trim()).filter(s => s.length > 0);
             
@@ -728,8 +736,15 @@ window.sendMessageToAI = async (source) => {
 
                 if (currentIndex >= sentences.length) {
                     window.lastInteractionWasVoice = false;
-                    if (window.isConversationMode) window.startVoiceRecognition(source, true);
-                    else window.updateMicUI(source, 'idle');
+                    
+                    // EJECUTAMOS LA DESPEDIDA SI ES NECESARIO
+                    if (window.isConversationMode && !shouldEndConversation) {
+                        window.startVoiceRecognition(source, true);
+                    } else {
+                        window.isConversationMode = false;
+                        window.updateMicUI(source, 'idle');
+                        playStopEarcon(); // Suena el tono de cierre
+                    }
                     return;
                 }
 
@@ -741,7 +756,6 @@ window.sendMessageToAI = async (source) => {
                 }
 
                 if (audioSrc) {
-                    // Usamos el reproductor global que ya desbloqueamos con el dedo del usuario
                     window.globalAudio.src = audioSrc;
                     window.globalAudio.onended = () => { currentIndex++; playNext(); };
                     window.globalAudio.onerror = () => { currentIndex++; playNext(); };
@@ -757,8 +771,13 @@ window.sendMessageToAI = async (source) => {
             if (sentences.length > 0) playNext();
             else {
                 window.lastInteractionWasVoice = false;
-                if (window.isConversationMode) window.startVoiceRecognition(source, true);
-                else window.updateMicUI(source, 'idle');
+                if (window.isConversationMode && !shouldEndConversation) {
+                    window.startVoiceRecognition(source, true);
+                } else {
+                    window.isConversationMode = false;
+                    window.updateMicUI(source, 'idle');
+                    playStopEarcon();
+                }
             }
         }
 
