@@ -425,8 +425,10 @@ async function fetchWithRetry(url, options, retries = 3) {
 
 window.currentRecognition = null;
 window.isConversationMode = false;
-window.currentAudio = null;
-window.micWatchdog = null; // NUEVO: El temporizador implacable para celulares
+window.micWatchdog = null;
+// NUEVO: El Reproductor Global y la Llave Maestra para Celulares
+window.globalAudio = new Audio();
+window.audioUnlocked = false;
 
 const playEarcon = () => {
     try {
@@ -487,12 +489,18 @@ window.updateMicUI = (source, state) => {
 };
 
 window.startVoiceRecognition = (source, isAutoRestart = false) => {
-    // Apagado manual o reseteo
+    // LLAVE MAESTRA: Desbloquear el audio de Safari/Chrome en el primer toque
+    if (!window.audioUnlocked && !isAutoRestart) {
+        window.globalAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; 
+        window.globalAudio.play().catch(()=>{});
+        window.audioUnlocked = true;
+    }
+
     if (!isAutoRestart && window.isConversationMode) {
         window.isConversationMode = false;
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
         if (window.currentRecognition) window.currentRecognition.abort();
-        if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
+        window.globalAudio.pause();
         window.updateMicUI(source, 'idle');
         playStopEarcon(); 
         return;
@@ -501,10 +509,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     window.isConversationMode = true;
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { 
-        window.notify("Tu navegador móvil no soporta voz o requiere permisos.", "error"); 
-        return; 
-    }
+    if (!SpeechRecognition) { window.notify("Tu navegador no soporta voz.", "error"); return; }
     
     const recognition = new SpeechRecognition();
     window.currentRecognition = recognition;
@@ -517,7 +522,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         window.updateMicUI(source, 'listening');
         playEarcon(); 
         
-        // EL PERRO GUARDIÁN: Apagado forzado e implacable a los 10 segundos
+        // PERRO GUARDIÁN (Ajustado a 15 segundos para no cortar al paciente)
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
         window.micWatchdog = setTimeout(() => {
             if (window.isConversationMode && !window.lastInteractionWasVoice) {
@@ -526,11 +531,11 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
                 window.updateMicUI(source, 'idle');
                 playStopEarcon();
             }
-        }, 10000); 
+        }, 15000); 
     };
     
     recognition.onresult = (event) => {
-        if (window.micWatchdog) clearTimeout(window.micWatchdog); // Si habló, salvado del watchdog
+        if (window.micWatchdog) clearTimeout(window.micWatchdog); 
         const transcript = event.results[0][0].transcript;
         const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
         if(input) input.value = transcript;
@@ -543,16 +548,14 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
     
     recognition.onerror = (event) => {
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
-        // Fallos comunes en móviles: no-speech (silencio) o not-allowed (permisos)
         if(event.error === 'not-allowed' || event.error === 'no-speech') { 
             window.isConversationMode = false; 
-            window.updateMicUI(source, 'idle');
+            window.updateMicUI(source, 'idle'); 
             if (event.error === 'no-speech') playStopEarcon();
         }
     };
     
     recognition.onend = () => {
-        // Si el navegador corta la conexión nativa por su cuenta
         if (window.isConversationMode && !window.lastInteractionWasVoice) {
             window.isConversationMode = false;
             if (window.micWatchdog) clearTimeout(window.micWatchdog);
@@ -571,11 +574,11 @@ window.sendMessageToAI = async (source) => {
     const userMsg = input?.value.trim();
     
     if (!window.lastInteractionWasVoice) {
-        if (window.isConversationMode) playStopEarcon(); // Sonido si escribe manual y mata el bucle
+        if (window.isConversationMode) playStopEarcon(); 
         window.isConversationMode = false;
-        window.silenceCounter = 0;
+        if (window.micWatchdog) clearTimeout(window.micWatchdog);
         if (window.currentRecognition) { window.currentRecognition.abort(); window.currentRecognition = null; }
-        if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
+        window.globalAudio.pause();
         window.updateMicUI(source, 'idle');
     }
 
@@ -602,7 +605,6 @@ window.sendMessageToAI = async (source) => {
     const now = new Date();
     const fechaHora = now.toLocaleString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
-    // VERIFICACIÓN DEL CANDADO DELUXE
     const rawMembresia = info["Suscripción o Membresia"] || info["Membresía"] || "";
     const isDeluxe = String(rawMembresia).toLowerCase().includes("deluxe");
 
@@ -639,11 +641,11 @@ window.sendMessageToAI = async (source) => {
     3. DISEÑO PREMIUM (AGRUPACIÓN POR MACRO): Diseña la receta. La lista de ingredientes DEBE estar agrupada estrictamente por macronutrientes.
        - Los ingredientes dentro de la lista son solo texto: - **Ingrediente:** cantidad.
        - **PROHIBIDO** poner iconos o tags ([VEG], [PRO], etc.) al lado de los ingredientes individuales.
-       - **OBLIGATORIO** usar estos títulos de sección Markdown EXACTOS con sus tags para categorizar (el sistema dibujará el icono en el título):
-         ### [PRO-HDR] Proteínas (Icono carne)
-         ### [VEG-HDR] Carbohidratos y Vegetales (Icono hoja)
-         ### [FAT-HDR] Grasas Saludables (Icono gota amarillo)
-         ### [SPICE-HDR] Especias y Extras (Icono mortero gris)
+       - **OBLIGATORIO** usar estos títulos de sección Markdown EXACTOS con sus tags para categorizar:
+         ### [PRO-HDR] Proteínas
+         ### [VEG-HDR] Carbohidratos y Vegetales
+         ### [FAT-HDR] Grasas Saludables
+         ### [SPICE-HDR] Especias y Extras
     4. INTERACCIÓN FINAL: Cierra diciendo: "¡Me encantaría ver cómo te queda! Cuando termines, tómale una foto a tu plato y súbela aquí para analizarlo juntos."
 
     REGLAS DE ACCIÓN OBLIGATORIAS:
@@ -673,6 +675,7 @@ window.sendMessageToAI = async (source) => {
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
 
+        // SISTEMA DE VOZ SEGURO PARA CELULARES
         if (window.lastInteractionWasVoice) {
             window.updateMicUI(source, 'speaking');
             
@@ -685,7 +688,7 @@ window.sendMessageToAI = async (source) => {
             let currentIndex = 0;
             let audioQueue = [];
 
-            const fetchAudio = async (text) => {
+            const fetchAudioSrc = async (text) => {
                 try {
                     const res = await fetch(ttsUrl, {
                         method: 'POST',
@@ -697,7 +700,7 @@ window.sendMessageToAI = async (source) => {
                         })
                     });
                     const data = await res.json();
-                    return data.audioContent ? new Audio("data:audio/mp3;base64," + data.audioContent) : null;
+                    return data.audioContent ? "data:audio/mp3;base64," + data.audioContent : null;
                 } catch (e) { return null; }
             };
 
@@ -711,18 +714,22 @@ window.sendMessageToAI = async (source) => {
                     return;
                 }
 
-                let audio = audioQueue[currentIndex];
-                if (!audio) audio = await fetchAudio(sentences[currentIndex]);
+                let audioSrc = audioQueue[currentIndex];
+                if (!audioSrc) audioSrc = await fetchAudioSrc(sentences[currentIndex]);
 
                 if (currentIndex + 1 < sentences.length) {
-                    fetchAudio(sentences[currentIndex + 1]).then(a => audioQueue[currentIndex + 1] = a);
+                    fetchAudioSrc(sentences[currentIndex + 1]).then(src => audioQueue[currentIndex + 1] = src);
                 }
 
-                if (audio) {
-                    if (window.currentAudio) window.currentAudio.pause();
-                    window.currentAudio = audio;
-                    audio.onended = () => { currentIndex++; playNext(); };
-                    audio.play().catch(() => { currentIndex++; playNext(); });
+                if (audioSrc) {
+                    // Usamos el reproductor global que ya desbloqueamos con el dedo del usuario
+                    window.globalAudio.src = audioSrc;
+                    window.globalAudio.onended = () => { currentIndex++; playNext(); };
+                    window.globalAudio.onerror = () => { currentIndex++; playNext(); };
+                    window.globalAudio.play().catch((err) => { 
+                        console.error("Bloqueo de Autoplay Apple/Android:", err);
+                        currentIndex++; playNext(); 
+                    });
                 } else {
                     currentIndex++; playNext();
                 }
@@ -738,7 +745,7 @@ window.sendMessageToAI = async (source) => {
 
     } catch (e) { 
         document.querySelectorAll('.ai-loading-indicator').forEach(el => el.remove());
-        window.appendChatMessageToAll('ai', `⚠️ Hubo un error al procesar. Intenta con una imagen más pequeña o texto.`); 
+        window.appendChatMessageToAll('ai', `⚠️ Hubo un error al procesar.`); 
         window.updateMicUI(source, 'idle');
     }
 };
