@@ -227,13 +227,26 @@ window.getProgramKey = (p) => {
 
 window.parseAIResponse = (text) => {
     if (!text) return "";
-    let html = text.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
+    let html = text;
+    
+    // 1. PRIMERO: Detectar Imágenes Markdown ![alt](url) y convertirlas en fotos reales dentro del chat
+    html = html.replace(/!\[([^\]]*)\]\((https?:\/\/[^\)]+)\)/g, '<div class="my-4 flex justify-center"><img src="$2" alt="$1" class="w-full max-w-[280px] md:max-w-[350px] rounded-2xl shadow-sm border border-slate-200 object-cover"></div>');
+    
+    // 2. LUEGO: Formatear negritas y cursivas
+    html = html.replace(/\*\*(.*?)\*\*/g, '<strong class="font-bold text-slate-900">$1</strong>');
     html = html.replace(/\*(.*?)\*/g, '<em class="italic text-slate-600">$1</em>');
+    
+    // 3. LUEGO: Formatear botones de función interna de la app
     html = html.replace(/\[([^\]]+)\]\(function:([a-zA-Z0-9-]+)\)/g, `<button type="button" onclick="window.handleAIAction('$2')" class="mt-3 flex items-center gap-2 bg-[#2E4982]/10 text-[#2E4982] px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-[#2E4982] hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start"><span>$1</span></button>`);
+    
+    // 4. LUEGO: Formatear enlaces normales externos (evitando tocar las imágenes)
     html = html.replace(/\[([^\]]+)\]\((https?:\/\/[^\)]+)\)/g, `<a href="$2" target="_blank" class="mt-3 flex items-center gap-2 bg-emerald-50 text-emerald-600 border border-emerald-100 px-5 py-3 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all shadow-sm w-full md:w-auto justify-center md:justify-start decoration-0"><span>$1</span></a>`);
+    
+    // 5. FINAL: Formatear listas y saltos de línea
     html = html.replace(/^\s*-\s+(.*)$/gm, '<li class="ml-4 list-disc marker:text-[#2E4982] pl-1 mb-1">$1</li>');
     html = html.replace(/(<li.*<\/li>)/s, '<ul class="my-2 space-y-1 text-left">$1</ul>');
     html = html.replace(/\n/g, '<br>');
+    
     return html;
 };
 
