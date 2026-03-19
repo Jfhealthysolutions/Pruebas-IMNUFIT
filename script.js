@@ -347,35 +347,41 @@ window.closeMobileChat = () => { window.showView('patient-view'); window.clearCh
 window.openAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.remove('hidden'); document.getElementById('ai-training-modal')?.classList.add('flex'); };
 window.closeAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.add('hidden'); };
 
-window.currentRecognition = null; // Variable global para controlar el hardware
+window.currentRecognition = null;
+window.isConversationMode = false;
+window.currentAudio = null;
 
-window.startVoiceRecognition = (source) => {
+window.startVoiceRecognition = (source, isAutoRestart = false) => {
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
 
-    // Funcionalidad Toggle: Si ya está escuchando y el usuario lo toca, lo apagamos
-    if (window.currentRecognition) {
-        window.currentRecognition.abort();
-        window.currentRecognition = null;
+    // Si el paciente toca el botón manualmente para APAGAR el bucle
+    if (!isAutoRestart && window.isConversationMode) {
+        window.isConversationMode = false;
+        if (window.currentRecognition) window.currentRecognition.abort();
+        if (window.currentAudio) window.currentAudio.pause();
+        
         input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
         btn.classList.remove('text-red-500', 'animate-pulse');
         btn.classList.add('text-slate-400');
         return;
     }
 
+    // Encender o mantener Modo Conversación
+    window.isConversationMode = true;
+
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognition) { window.notify("Tu navegador no soporta reconocimiento de voz.", "error"); return; }
+    if (!SpeechRecognition) { window.notify("Tu navegador no soporta voz.", "error"); return; }
     
     const recognition = new SpeechRecognition();
-    window.currentRecognition = recognition; // Guardamos la sesión activa
+    window.currentRecognition = recognition;
     
     recognition.lang = 'es-ES';
     recognition.interimResults = false;
     recognition.maxAlternatives = 1;
     
     recognition.onstart = () => {
-        if ('speechSynthesis' in window) window.speechSynthesis.cancel(); // Silenciar si la IA estaba hablando
-        input.placeholder = "Escuchando...";
+        input.placeholder = "Escuchando... (Modo Manos Libres)";
         btn.classList.add('text-red-500', 'animate-pulse');
         btn.classList.remove('text-slate-400');
     };
@@ -383,22 +389,28 @@ window.startVoiceRecognition = (source) => {
     recognition.onresult = (event) => {
         const transcript = event.results[0][0].transcript;
         input.value = transcript;
-        window.lastInteractionWasVoice = true; // Activar flag de voz
+        window.lastInteractionWasVoice = true; 
+        
+        // Pausa visual mientras la IA piensa
+        input.placeholder = "Procesando...";
+        btn.classList.remove('animate-pulse');
+        window.currentRecognition = null; 
+        
         window.sendMessageToAI(source);
     };
     
     recognition.onerror = (event) => { 
-        if(event.error !== 'aborted') window.notify("Error en el micrófono: " + event.error, "error"); 
+        // Silenciamos errores menores (ej: no hablar) para que el loop no se rompa
     };
     
     recognition.onend = () => {
-        input.placeholder = source === 'mobile' ? "Escribe o envía una foto..." : "Pregunta...";
-        btn.classList.remove('text-red-500', 'animate-pulse');
-        btn.classList.add('text-slate-400');
-        window.currentRecognition = null; // Liberamos el hardware al terminar
+        // Reiniciar el loop automáticamente si hay silencio prolongado (y la IA no está procesando)
+        if (window.isConversationMode && !window.lastInteractionWasVoice) {
+            setTimeout(() => { if (window.isConversationMode) window.startVoiceRecognition(source, true); }, 300);
+        }
     };
     
-    recognition.start();
+    try { recognition.start(); } catch(e) {}
 };
 window.updateSpecMode = (val) => { specModeSelection = val; window.refreshUIWithData(); window.showView('patient-view'); };
 
@@ -586,10 +598,12 @@ window.sendMessageToAI = async (source) => {
     const input = document.getElementById(source === 'mobile' ? 'ai-input-mobile' : 'ai-input-desktop');
     const userMsg = input?.value.trim();
     
-    // Matar el micrófono inmediatamente si el usuario envía algo manual
-    if (window.currentRecognition) {
-        window.currentRecognition.abort();
-        window.currentRecognition = null;
+    if (!window.lastInteractionWasVoice) {
+        window.isConversationMode = false;
+        if (window.currentRecognition) { window.currentRecognition.abort(); window.currentRecognition = null; }
+        if (window.currentAudio) { window.currentAudio.pause(); window.currentAudio = null; }
+        const btn = document.getElementById(source === 'mobile' ? 'btn-mic-mobile' : 'btn-mic-desktop');
+        if(btn) { btn.classList.remove('text-red-500', 'animate-pulse'); btn.classList.add('text-slate-400'); }
     }
 
     if (!userMsg && !currentImageBase64) return;
@@ -665,10 +679,9 @@ window.sendMessageToAI = async (source) => {
         window.appendChatMessageToAll('ai', aiText);
         chatHistory.push({ role: 'user', text: msgToSend }, { role: 'ai', text: aiText });
 
-        // --- SISTEMA DE VOZ BIDIRECCIONAL (GOOGLE CLOUD PREMIUM TTS) ---
+        // --- SISTEMA DE VOZ BIDIRECCIONAL (Bucle Continuo) ---
         if (window.lastInteractionWasVoice) {
             const textToSpeak = aiText.replace(/[*_#]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/(?:https?|ftp):\/\/[\n\S]+/g, '');
-            
             const ttsKey = "AIzaSyDGprBQ8u5UZAL_B1kostoNCpBOonyX1OA"; 
             const ttsUrl = `https://texttospeech.googleapis.com/v1/text:synthesize?key=${ttsKey}`;
 
@@ -686,16 +699,23 @@ window.sendMessageToAI = async (source) => {
                 const ttsData = await ttsRes.json();
                 
                 if (ttsData.audioContent) {
-                    const audio = new Audio("data:audio/mp3;base64," + ttsData.audioContent);
-                    audio.play();
+                    if (window.currentAudio) window.currentAudio.pause();
+                    window.currentAudio = new Audio("data:audio/mp3;base64," + ttsData.audioContent);
+                    
+                    window.currentAudio.onended = () => {
+                        window.lastInteractionWasVoice = false;
+                        if (window.isConversationMode) window.startVoiceRecognition(source, true);
+                    };
+                    
+                    window.currentAudio.play();
                 } else {
-                    console.error("Error en TTS API:", ttsData);
+                    window.lastInteractionWasVoice = false;
+                    if (window.isConversationMode) window.startVoiceRecognition(source, true);
                 }
             } catch (err) {
-                console.error("Fallo al conectar con Google TTS:", err);
+                window.lastInteractionWasVoice = false;
+                if (window.isConversationMode) window.startVoiceRecognition(source, true);
             }
-            
-            window.lastInteractionWasVoice = false; 
         }
 
     } catch (e) { 
