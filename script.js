@@ -489,11 +489,17 @@ window.updateMicUI = (source, state) => {
 };
 
 window.startVoiceRecognition = (source, isAutoRestart = false) => {
-    // LLAVE MAESTRA: Desbloquear el audio de Safari/Chrome en el primer toque
+    // LLAVE MAESTRA SECUENCIADA: Evitamos que el celular se quede sordo al iniciar
     if (!window.audioUnlocked && !isAutoRestart) {
+        window.audioUnlocked = true;
         window.globalAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA"; 
         window.globalAudio.play().catch(()=>{});
-        window.audioUnlocked = true;
+        
+        // Esperamos 100 milisegundos para que el celular termine de procesar el audio antes de abrir el micrófono
+        setTimeout(() => {
+            window.startVoiceRecognition(source, true);
+        }, 100);
+        return; 
     }
 
     if (!isAutoRestart && window.isConversationMode) {
@@ -522,7 +528,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         window.updateMicUI(source, 'listening');
         playEarcon(); 
         
-        // PERRO GUARDIÁN: Solo vigila el silencio inicial
+        // PERRO GUARDIÁN AJUSTADO A 10 SEGUNDOS
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
         window.micWatchdog = setTimeout(() => {
             if (window.isConversationMode && !window.lastInteractionWasVoice) {
@@ -531,10 +537,9 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
                 window.updateMicUI(source, 'idle');
                 playStopEarcon();
             }
-        }, 15000); 
+        }, 10000); 
     };
 
-    // NUEVO: Si el paciente empieza a hablar, MATAMOS al Perro Guardián
     recognition.onspeechstart = () => {
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
     };
