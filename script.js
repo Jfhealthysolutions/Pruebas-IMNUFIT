@@ -415,20 +415,12 @@ window.stopAllAudioAndMic = () => {
     window.lastInteractionWasVoice = false;
     if (window.micWatchdog) clearTimeout(window.micWatchdog);
     if (window.currentRecognition) { 
-        window.currentRecognition.abort(); 
+        try { window.currentRecognition.abort(); } catch(e){} 
         window.currentRecognition = null; 
     }
     if (window.globalAudio) window.globalAudio.pause();
     window.updateMicUI('mobile', 'idle');
     window.updateMicUI('desktop', 'idle');
-    
-    // EL ASESINO DE LA LUZ NARANJA: Obliga a Safari/Chrome a soltar el hardware físicamente
-    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        navigator.mediaDevices.getUserMedia({ audio: true })
-            .then(stream => {
-                stream.getTracks().forEach(track => track.stop());
-            }).catch(() => {});
-    }
 };
 
 window.handleAIAction = (viewId) => { window.stopAllAudioAndMic(); window.closeDesktopAIModal(); if (viewId === 'program-detail-view') window.viewProgramResources(); else window.showView(viewId); };
@@ -512,6 +504,8 @@ const playEarcon = () => {
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
         osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.1);
+        // Cerramos el motor de audio al terminar
+        setTimeout(() => { if(ctx.state !== 'closed') ctx.close(); }, 150);
     } catch(e){}
 };
 
@@ -527,6 +521,8 @@ const playStopEarcon = () => {
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
         osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
+        // Cerramos el motor de audio al terminar
+        setTimeout(() => { if(ctx.state !== 'closed') ctx.close(); }, 200);
     } catch(e){}
 };
 
@@ -616,7 +612,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         if(input) input.value = transcript;
         
         window.lastInteractionWasVoice = true; 
-        window.currentRecognition = null; 
+        // Eliminamos window.currentRecognition = null; para que el sistema lo apague correctamente al final
         window.updateMicUI(source, 'processing');
         window.sendMessageToAI(source);
     };
