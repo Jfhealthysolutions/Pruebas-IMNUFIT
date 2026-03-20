@@ -504,8 +504,6 @@ const playEarcon = () => {
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
         osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.1);
-        // Cerramos el motor de audio al terminar
-        setTimeout(() => { if(ctx.state !== 'closed') ctx.close(); }, 150);
     } catch(e){}
 };
 
@@ -521,8 +519,6 @@ const playStopEarcon = () => {
         gain.gain.setValueAtTime(0.1, ctx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.15);
         osc.start(ctx.currentTime); osc.stop(ctx.currentTime + 0.15);
-        // Cerramos el motor de audio al terminar
-        setTimeout(() => { if(ctx.state !== 'closed') ctx.close(); }, 200);
     } catch(e){}
 };
 
