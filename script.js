@@ -813,8 +813,8 @@ window.sendMessageToAI = async (source) => {
                     if (window.isConversationMode && !shouldEndConversation) {
                         window.startVoiceRecognition(source, true);
                     } else {
-                        window.isConversationMode = false;
-                        window.updateMicUI(source, 'idle');
+                        // AQUÍ ENTRA EL ASESINO DE LA LUZ NARANJA PARA LA DESPEDIDA
+                        if (typeof window.stopAllAudioAndMic === 'function') window.stopAllAudioAndMic();
                         playStopEarcon(); 
                     }
                     return;
@@ -845,8 +845,8 @@ window.sendMessageToAI = async (source) => {
                 if (window.isConversationMode && !shouldEndConversation) {
                     window.startVoiceRecognition(source, true);
                 } else {
-                    window.isConversationMode = false;
-                    window.updateMicUI(source, 'idle');
+                    // AQUÍ ENTRA EL ASESINO DE LA LUZ NARANJA POR SI NO HAY AUDIO
+                    if (typeof window.stopAllAudioAndMic === 'function') window.stopAllAudioAndMic();
                     playStopEarcon();
                 }
             }
