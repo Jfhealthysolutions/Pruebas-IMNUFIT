@@ -595,11 +595,9 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         }, 10000); 
     };
 
-    // CORRECCIÓN: Solo matamos el temporizador cuando el paciente empieza a HABLAR con palabras reales.
-    // (Eliminamos onaudiostart y onsoundstart para que el ruido de fondo no deje el micrófono pegado).
-    recognition.onspeechstart = () => { 
-        if (window.micWatchdog) clearTimeout(window.micWatchdog); 
-    };
+    recognition.onaudiostart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
+    recognition.onsoundstart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
+    recognition.onspeechstart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
     
     recognition.onresult = (event) => {
         if (window.micWatchdog) clearTimeout(window.micWatchdog); 
