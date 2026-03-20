@@ -415,12 +415,20 @@ window.stopAllAudioAndMic = () => {
     window.lastInteractionWasVoice = false;
     if (window.micWatchdog) clearTimeout(window.micWatchdog);
     if (window.currentRecognition) { 
-        window.currentRecognition.abort(); // Le quita el hardware al navegador al instante
+        window.currentRecognition.abort(); 
         window.currentRecognition = null; 
     }
     if (window.globalAudio) window.globalAudio.pause();
     window.updateMicUI('mobile', 'idle');
     window.updateMicUI('desktop', 'idle');
+    
+    // EL ASESINO DE LA LUZ NARANJA: Obliga a Safari/Chrome a soltar el hardware físicamente
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        navigator.mediaDevices.getUserMedia({ audio: true })
+            .then(stream => {
+                stream.getTracks().forEach(track => track.stop());
+            }).catch(() => {});
+    }
 };
 
 window.handleAIAction = (viewId) => { window.stopAllAudioAndMic(); window.closeDesktopAIModal(); if (viewId === 'program-detail-view') window.viewProgramResources(); else window.showView(viewId); };
