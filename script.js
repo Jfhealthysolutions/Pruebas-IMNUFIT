@@ -155,10 +155,12 @@ window.resetInactivityTimer = () => {
     }, INACTIVITY_LIMIT);
 };
 
-// Escuchar cambios de visibilidad para pausar animaciones (Cool Phone Mode)
+// Escuchar cambios de visibilidad para pausar animaciones y Proteger la Privacidad
 document.addEventListener('visibilitychange', () => {
     if (document.hidden) {
         document.body.classList.add('paused-animations');
+        // Si el paciente minimiza la app o bloquea el teléfono, apagamos el micrófono inmediatamente
+        if (typeof window.stopAllAudioAndMic === 'function') window.stopAllAudioAndMic();
     } else {
         document.body.classList.remove('paused-animations');
     }
@@ -407,11 +409,25 @@ window.loadChatMemory = async () => {
     }
 };
 
-window.handleAIAction = (viewId) => { window.closeDesktopAIModal(); if (viewId === 'program-detail-view') window.viewProgramResources(); else window.showView(viewId); };
+// NUEVO: Apagado maestro del micrófono para privacidad total
+window.stopAllAudioAndMic = () => {
+    window.isConversationMode = false;
+    window.lastInteractionWasVoice = false;
+    if (window.micWatchdog) clearTimeout(window.micWatchdog);
+    if (window.currentRecognition) { 
+        window.currentRecognition.abort(); // Le quita el hardware al navegador al instante
+        window.currentRecognition = null; 
+    }
+    if (window.globalAudio) window.globalAudio.pause();
+    window.updateMicUI('mobile', 'idle');
+    window.updateMicUI('desktop', 'idle');
+};
+
+window.handleAIAction = (viewId) => { window.stopAllAudioAndMic(); window.closeDesktopAIModal(); if (viewId === 'program-detail-view') window.viewProgramResources(); else window.showView(viewId); };
 window.openDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(m){ m.classList.remove('hidden'); m.classList.add('flex'); setTimeout(() => { m.classList.remove('opacity-0'); m.querySelector('div')?.classList.remove('scale-95', 'opacity-0'); document.getElementById('ai-input-desktop')?.focus(); window.scrollToBottom(); }, 10); }};
-window.closeDesktopAIModal = () => { const m = document.getElementById('ai-modal-overlay'); if(!m) return; m.classList.add('opacity-0'); m.querySelector('div')?.classList.add('scale-95', 'opacity-0'); setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); }, 300); };
+window.closeDesktopAIModal = () => { window.stopAllAudioAndMic(); const m = document.getElementById('ai-modal-overlay'); if(!m) return; m.classList.add('opacity-0'); m.querySelector('div')?.classList.add('scale-95', 'opacity-0'); setTimeout(() => { m.classList.add('hidden'); m.classList.remove('flex'); }, 300); };
 window.openAIChat = () => { if (window.innerWidth < 768) { window.showView('mobile-ai-view'); setTimeout(() => { document.getElementById('ai-input-mobile')?.focus(); window.scrollToBottom(); }, 300); } else window.openDesktopAIModal(); };
-window.closeMobileChat = () => { window.showView('patient-view'); };
+window.closeMobileChat = () => { window.stopAllAudioAndMic(); window.showView('patient-view'); };
 window.openAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.remove('hidden'); document.getElementById('ai-training-modal')?.classList.add('flex'); };
 window.closeAITrainingModal = () => { document.getElementById('ai-training-modal')?.classList.add('hidden'); };
 window.syncAIInstructions = async () => {
@@ -567,7 +583,7 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         window.updateMicUI(source, 'listening');
         playEarcon(); 
         
-        // PERRO GUARDIÁN (10 Segundos de INACTIVIDAD)
+        // PERRO GUARDIÁN (10 Segundos de INACTIVIDAD ABSOLUTA)
         if (window.micWatchdog) clearTimeout(window.micWatchdog);
         window.micWatchdog = setTimeout(() => {
             if (window.isConversationMode && !window.lastInteractionWasVoice) {
@@ -579,10 +595,11 @@ window.startVoiceRecognition = (source, isAutoRestart = false) => {
         }, 10000); 
     };
 
-    // BLINDAJE MÓVIL: Matamos el Perro Guardián si el celular detecta CUALQUIER actividad
-    recognition.onaudiostart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
-    recognition.onsoundstart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
-    recognition.onspeechstart = () => { if (window.micWatchdog) clearTimeout(window.micWatchdog); };
+    // CORRECCIÓN: Solo matamos el temporizador cuando el paciente empieza a HABLAR con palabras reales.
+    // (Eliminamos onaudiostart y onsoundstart para que el ruido de fondo no deje el micrófono pegado).
+    recognition.onspeechstart = () => { 
+        if (window.micWatchdog) clearTimeout(window.micWatchdog); 
+    };
     
     recognition.onresult = (event) => {
         if (window.micWatchdog) clearTimeout(window.micWatchdog); 
